@@ -1,0 +1,2 @@
+# Example config
+DEBUG = True
