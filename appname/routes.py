@@ -3,7 +3,7 @@ from appname import app
 
 # IMPORT FUNCTION
 from appname.functions.user_details import *
-
+from appname.functions.user_login import *
 
 # GET USER DETAIL
 @app.route('/chattingapp/getuserdetails', methods=['GET'])
@@ -84,6 +84,19 @@ def delete_user_route():
         result = funcDeleteUserDetail(user_id)
 
         status_code = 200 if result['status'] == 'success' else 404
+        return jsonify(result), status_code
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
+# LOGIN USER
+@app.route('/chattingapp/loginuser', methods=['POST'])
+def login_user_route():
+    try:
+        data = request.get_json()
+        result = funcLoginUser(data)
+
+        status_code = 200 if result['status'] == 'success' else 401
         return jsonify(result), status_code
 
     except Exception as e:
