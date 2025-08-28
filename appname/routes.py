@@ -2,8 +2,8 @@ from flask import request, jsonify
 from appname import app 
 
 # IMPORT FUNCTION
-from appname.functions.user_details import *
-from appname.functions.user_login import *
+from appname.datas.user_details import *
+from appname.datas.user_login import *
 
 # GET USER DETAIL
 @app.route('/chattingapp/getuserdetails', methods=['GET'])
