@@ -225,34 +225,6 @@ def reject_friend_request_route():
             "data": []
         }), 500
 
-# ACCEPT FRIEND REQUEST
-@app.route('/chattingapp/acceptfriendrequest', methods=['POST'])
-def accept_friend_request_route():
-    try:
-        data = request.get_json()
-        request_id = data.get("request_id") if data else None
-
-        if not request_id:
-            return jsonify({
-                "status": "error",
-                "code": 400,
-                "message": "Missing required parameter: request_id",
-                "data": []
-            }), 400
-
-        result = funcAcceptFriendRequest(request_id)
-
-        status_code = 200 if result["status"] == "success" else 404
-        return jsonify(result), status_code
-
-    except Exception as e:
-        return jsonify({
-            "status": "error",
-            "code": 500,
-            "message": str(e),
-            "data": []
-        }), 500
-
 #==================  ADD FRIEND  ==================#
 # SEARCH FRIEND BY USERNAME
 @app.route('/chattingapp/searchfriendbyusername', methods=['GET'])
