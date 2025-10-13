@@ -1,0 +1,3 @@
+# requirements.txt - tambahkan dependency untuk HTTPS
+flask-cors
+pyopenssl
