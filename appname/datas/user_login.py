@@ -1,4 +1,6 @@
 from appname.config import *
+import bcrypt
+
 
 def loginUser(identifier, password):
     conn = get_db_connection()
@@ -25,8 +27,17 @@ def loginUser(identifier, password):
 
         if row:
             stored_password = row[7]
-            if stored_password != password:
-                return {"error": "Password salah"}
+            # Check if password is hashed (bcrypt) or plain text
+            if stored_password.startswith("$2b$"):
+                # Hashed password - use bcrypt
+                if not bcrypt.checkpw(
+                    password.encode("utf-8"), stored_password.encode("utf-8")
+                ):
+                    return {"error": "Password salah"}
+            else:
+                # Plain text password (for backward compatibility)
+                if stored_password != password:
+                    return {"error": "Password salah"}
 
             return {
                 "user_id": row[0],
@@ -50,6 +61,7 @@ def loginUser(identifier, password):
 #     FUNCTION WRAPPER
 # ==========================
 
+
 def funcLoginUser(data):
     try:
         identifier = data.get("identifier")
@@ -60,7 +72,7 @@ def funcLoginUser(data):
                 "status": "error",
                 "code": 400,
                 "message": "Field 'identifier' dan 'password' wajib diisi",
-                "data": []
+                "data": [],
             }
 
         result = loginUser(identifier, password)
@@ -70,20 +82,15 @@ def funcLoginUser(data):
                 "status": "error",
                 "code": 401,
                 "message": result["error"],
-                "data": []
+                "data": [],
             }
 
         return {
             "status": "success",
             "code": 0,
             "message": "Login berhasil",
-            "data": [result]
+            "data": [result],
         }
 
     except Exception as e:
-        return {
-            "status": "error",
-            "code": 500,
-            "message": str(e),
-            "data": []
-        }
+        return {"status": "error", "code": 500, "message": str(e), "data": []}
