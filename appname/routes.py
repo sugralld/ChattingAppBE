@@ -258,6 +258,7 @@ def reject_friend_request_route():
 @app.route('/chattingapp/searchfriendbyusername', methods=['GET'])
 def search_friend_by_username_route():
     try:
+        user_id = request.args.get('user_id')
         keyword = request.args.get('keyword')
         if not keyword:
             return jsonify({
@@ -270,9 +271,10 @@ def search_friend_by_username_route():
         limit = int(request.args.get('limit', 10))
         page = int(request.args.get('page', 1))
 
-        result = funcSearchFriendByUsername(keyword, limit, page)
+        # ✅ Pass user_id to your function
+        result = funcSearchFriendByUsername(user_id, keyword, limit, page)
 
-        status_code = 200 if result['status'] == 'success' else 500
+        status_code = 200 if result.get('status') == 'success' else 500
         return jsonify(result), status_code
 
     except Exception as e:

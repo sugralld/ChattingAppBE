@@ -64,61 +64,61 @@ def rejectFriendRequest(request_id):
         conn.close()
 
 # ACCEPT FRIEND REQUEST (DELETE + INSERT TO user_friends)
-def acceptFriendRequest(request_id):
-    conn = get_db_connection()
-    cur = conn.cursor()
+# def acceptFriendRequest(request_id):
+#     conn = get_db_connection()
+#     cur = conn.cursor()
 
-    try:
-        # 1. Get request details
-        cur.execute("""
-            SELECT request_id, sender, receiver, sent_at, status
-            FROM friend_request
-            WHERE request_id = %s
-        """, (request_id,))
-        row = cur.fetchone()
+#     try:
+#         # 1. Get request details
+#         cur.execute("""
+#             SELECT request_id, sender, receiver, sent_at, status
+#             FROM friend_request
+#             WHERE request_id = %s
+#         """, (request_id,))
+#         row = cur.fetchone()
 
-        if not row:
-            return {"error": f"No friend request found with id {request_id}"}
+#         if not row:
+#             return {"error": f"No friend request found with id {request_id}"}
 
-        sender = row[1]
-        receiver = row[2]
+#         sender = row[1]
+#         receiver = row[2]
 
-        # 2. Delete the friend request
-        cur.execute("""
-            DELETE FROM friend_request WHERE request_id = %s
-        """, (request_id,))
+#         # 2. Delete the friend request
+#         cur.execute("""
+#             DELETE FROM friend_request WHERE request_id = %s
+#         """, (request_id,))
 
-        # 3. Insert into user_friends (sender -> user_id_first, receiver -> user_id_second)
-        cur.execute("""
-            INSERT INTO user_friends (
-                user_id_first, username_first,
-                user_id_second, username_second,
-                created_at
-            )
-            SELECT 
-                uf1.user_id, uf1.username,
-                uf2.user_id, uf2.username,
-                %s
-            FROM users uf1, users uf2
-            WHERE uf1.user_id = %s AND uf2.user_id = %s
-        """, (datetime.now(), sender, receiver))
+#         # 3. Insert into user_friends (sender -> user_id_first, receiver -> user_id_second)
+#         cur.execute("""
+#             INSERT INTO user_friends (
+#                 user_id_first, username_first,
+#                 user_id_second, username_second,
+#                 created_at
+#             )
+#             SELECT 
+#                 uf1.user_id, uf1.username,
+#                 uf2.user_id, uf2.username,
+#                 %s
+#             FROM users uf1, users uf2
+#             WHERE uf1.user_id = %s AND uf2.user_id = %s
+#         """, (datetime.now(), sender, receiver))
 
-        conn.commit()
+#         conn.commit()
 
-        return {
-            "success": True,
-            "message": "Friend request accepted and added to user_friends",
-            "sender": sender,
-            "receiver": receiver
-        }
+#         return {
+#             "success": True,
+#             "message": "Friend request accepted and added to user_friends",
+#             "sender": sender,
+#             "receiver": receiver
+#         }
 
-    except Exception as e:
-        conn.rollback()
-        return {"error": str(e)}
+#     except Exception as e:
+#         conn.rollback()
+#         return {"error": str(e)}
 
-    finally:
-        cur.close()
-        conn.close()
+#     finally:
+#         cur.close()
+#         conn.close()
 
 
 ########################################
@@ -149,6 +149,7 @@ def funcGetFriendRequests(receiver, limit=10, page=1):
 
         return {
             "status": "success",
+            "count": len(formatted_data),
             "code": 0,
             "message": "",
             "data": formatted_data
@@ -189,32 +190,32 @@ def funcRejectFriendRequest(request_id):
             "data": []
         }
     
-def funcAcceptFriendRequest(request_id):
-    try:
-        result = acceptFriendRequest(request_id)
+# def funcAcceptFriendRequest(request_id):
+#     try:
+#         result = acceptFriendRequest(request_id)
 
-        if isinstance(result, dict) and "error" in result:
-            return {
-                "status": "error",
-                "code": 404,
-                "message": result["error"],
-                "data": []
-            }
+#         if isinstance(result, dict) and "error" in result:
+#             return {
+#                 "status": "error",
+#                 "code": 404,
+#                 "message": result["error"],
+#                 "data": []
+#             }
 
-        return {
-            "status": "success",
-            "code": 0,
-            "message": result["message"],
-            "data": {
-                "sender": result["sender"],
-                "receiver": result["receiver"]
-            }
-        }
+#         return {
+#             "status": "success",
+#             "code": 0,
+#             "message": result["message"],
+#             "data": {
+#                 "sender": result["sender"],
+#                 "receiver": result["receiver"]
+#             }
+#         }
 
-    except Exception as e:
-        return {
-            "status": "error",
-            "code": 500,
-            "message": str(e),
-            "data": []
-        }
+#     except Exception as e:
+#         return {
+#             "status": "error",
+#             "code": 500,
+#             "message": str(e),
+#             "data": []
+#         }
