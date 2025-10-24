@@ -5,7 +5,7 @@ import uuid
 ########################################
 #        SEARCH FRIEND USERNAME        #
 ########################################
-def searchFriendByUsername(keyword, limit=10, page=1):
+def searchFriendByUsername(user_id, keyword, limit=10, page=1):
     offset = (page - 1) * limit
     conn = get_db_connection()
     cur = conn.cursor()
@@ -20,12 +20,13 @@ def searchFriendByUsername(keyword, limit=10, page=1):
             updated_at
         FROM user_detail
         WHERE username LIKE %s
+          AND user_id != %s
         ORDER BY created_at DESC
         LIMIT %s OFFSET %s;
     """
 
     try:
-        cur.execute(query, (f"%{keyword}%", limit, offset))
+        cur.execute(query, (f"%{keyword}%", user_id, limit, offset))
         rows = cur.fetchall()
         results = []
         for row in rows:
@@ -165,10 +166,16 @@ def acceptFriendRequest(request_id, sender_id, receiver_id):
             datetime.now()
         ))
 
+        # ✅ Delete the friend request record after success
+        cur.execute("""
+            DELETE FROM friend_request 
+            WHERE request_id = %s
+        """, (request_id,))
+
         conn.commit()
         return {
             "success": True,
-            "message": "Friend request accepted",
+            "message": "Friend request accepted and deleted successfully",
             "sender": {"user_id": sender_id, "username": sender_username},
             "receiver": {"user_id": receiver_id, "username": receiver_username}
         }
@@ -184,9 +191,9 @@ def acceptFriendRequest(request_id, sender_id, receiver_id):
 ########################################
 #          FUNCTION WRAPPERS           #
 ########################################
-def funcSearchFriendByUsername(keyword, limit=10, page=1):
+def funcSearchFriendByUsername(user_id, keyword, limit=10, page=1):
     try:
-        results = searchFriendByUsername(keyword, limit, page)
+        results = searchFriendByUsername(user_id, keyword, limit, page)
         if isinstance(results, dict) and "error" in results:
             return {"status": "error", "code": 404, "message": results["error"], "data": []}
 

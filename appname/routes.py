@@ -1,14 +1,13 @@
 from flask import request, jsonify
 from appname import app
 
-# ==================  IMPORT FUNCTION  ==================#
+# IMPORT FUNCTION
 from appname.datas.user_details import *
 from appname.datas.user_login import *
 from appname.datas.user_friends import *
 from appname.datas.friend_request import *
-from appname.functions.add_friend import *
 from appname.functions.user_register import *
-
+from appname.functions.add_friend import *
 
 # GET USER DETAIL
 @app.route("/chattingapp/getuserdetails", methods=["GET"])
@@ -27,7 +26,6 @@ def get_users_route():
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 # GET USER DETAIL BY ID
 @app.route("/chattingapp/getuserdetailsbyid", methods=["GET"])
@@ -48,7 +46,6 @@ def get_user_by_id_route():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 # INSERT USER DETAIL
 @app.route("/chattingapp/insertuserdetails", methods=["POST"])
 def insert_user_route():
@@ -61,7 +58,6 @@ def insert_user_route():
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 # UPDATE USER DETAIL
 @app.route("/chattingapp/updateuserdetails", methods=["PUT"])
@@ -82,7 +78,6 @@ def update_user_route():
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 # DELETE USER DETAIL
 @app.route("/chattingapp/deleteuserdetails", methods=["DELETE"])
@@ -158,8 +153,7 @@ def register_user_route():
         return jsonify(result), status_code
 
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # ==================  FRIENDLISTS  ==================#
 # GET USER FRIENDS by user_id
@@ -307,7 +301,8 @@ def reject_friend_request_route():
 @app.route("/chattingapp/searchfriendbyusername", methods=["GET"])
 def search_friend_by_username_route():
     try:
-        keyword = request.args.get("keyword")
+        user_id = request.args.get('user_id')
+        keyword = request.args.get('keyword')
         if not keyword:
             return (
                 jsonify(
@@ -324,9 +319,10 @@ def search_friend_by_username_route():
         limit = int(request.args.get("limit", 10))
         page = int(request.args.get("page", 1))
 
-        result = funcSearchFriendByUsername(keyword, limit, page)
+        # ✅ Pass user_id to your function
+        result = funcSearchFriendByUsername(user_id, keyword, limit, page)
 
-        status_code = 200 if result["status"] == "success" else 500
+        status_code = 200 if result.get('status') == 'success' else 500
         return jsonify(result), status_code
 
     except Exception as e:
@@ -397,7 +393,9 @@ def accept_friend_request_route():
         return jsonify(result), status_code
 
     except Exception as e:
-        return (
-            jsonify({"status": "error", "code": 500, "message": str(e), "data": []}),
-            500,
-        )
+        return jsonify({
+            "status": "error",
+            "code": 500,
+            "message": str(e),
+            "data": []
+        }), 500
