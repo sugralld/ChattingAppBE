@@ -168,7 +168,13 @@ def funcGetFriendRequests(receiver, limit=10, page=1):
                 }
             )
 
-        return {"status": "success", "code": 0, "message": "", "data": formatted_data}
+        return {
+            "status": "success",
+            "count": len(formatted_data),
+            "code": 0,
+            "message": "",
+            "data": formatted_data,
+        }
 
     except Exception as e:
         return {"status": "error", "code": 500, "message": str(e), "data": []}
