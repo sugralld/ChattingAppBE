@@ -12,21 +12,39 @@ def searchFriendByUsername(user_id, keyword, limit=10, page=1):
 
     query = """
         SELECT 
-            user_id,
-            username,
-            profile_picture,
-            blocked_user,
-            created_at,
-            updated_at
-        FROM user_detail
-        WHERE username LIKE %s
-          AND user_id != %s
-        ORDER BY created_at DESC
+            ud.user_id,
+            ud.username,
+            ud.profile_picture,
+            ud.blocked_user,
+            ud.created_at,
+            ud.updated_at,
+            CASE 
+                WHEN uf.user_id_first IS NOT NULL OR uf.user_id_second IS NOT NULL THEN 'connected'
+                ELSE 'not connected'
+            END AS status
+        FROM user_detail ud
+        LEFT JOIN user_friends uf 
+            ON (
+                (
+                    uf.user_id_first = %s AND uf.user_id_second = ud.user_id
+                    AND uf.username_first = (SELECT username FROM user_detail WHERE user_id = %s)
+                    AND uf.username_second = ud.username
+                )
+                OR 
+                (
+                    uf.user_id_second = %s AND uf.user_id_first = ud.user_id
+                    AND uf.username_second = (SELECT username FROM user_detail WHERE user_id = %s)
+                    AND uf.username_first = ud.username
+                )
+            )
+        WHERE ud.username LIKE %s
+          AND ud.user_id != %s
+        ORDER BY ud.created_at DESC
         LIMIT %s OFFSET %s;
     """
 
     try:
-        cur.execute(query, (f"%{keyword}%", user_id, limit, offset))
+        cur.execute(query, (user_id, user_id, user_id, user_id, f"%{keyword}%", user_id, limit, offset))
         rows = cur.fetchall()
         results = []
         for row in rows:
@@ -37,6 +55,7 @@ def searchFriendByUsername(user_id, keyword, limit=10, page=1):
                 "blocked_user": row[3],
                 "created_at": row[4],
                 "updated_at": row[5],
+                "status": row[6]
             })
         return results
     except Exception as e:
@@ -44,7 +63,6 @@ def searchFriendByUsername(user_id, keyword, limit=10, page=1):
     finally:
         cur.close()
         conn.close()
-
 
 ########################################
 #        SEND FRIEND REQUEST           #
