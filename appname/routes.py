@@ -404,6 +404,8 @@ def accept_friend_request_route():
 
 # ==================  CHAT FRIEND  ==================#
 
+#
+
 # CREATE OR GET CHAT ROOM
 @app.route("/chattingapp/createorgetchatroom", methods=["POST"])
 def create_or_get_chat_room_route():
