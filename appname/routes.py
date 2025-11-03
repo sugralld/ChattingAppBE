@@ -1,13 +1,15 @@
 from flask import request, jsonify
-from appname import app
+from appname import app, socketio
 
 # IMPORT FUNCTION
 from appname.datas.user_details import *
 from appname.datas.user_login import *
 from appname.datas.user_friends import *
 from appname.datas.friend_request import *
+from appname.datas.chat_room import *
 from appname.functions.user_register import *
 from appname.functions.add_friend import *
+from appname.functions.messages import *
 
 # GET USER DETAIL
 @app.route("/chattingapp/getuserdetails", methods=["GET"])
@@ -399,3 +401,80 @@ def accept_friend_request_route():
             "message": str(e),
             "data": []
         }), 500
+
+# ==================  CHAT FRIEND  ==================#
+
+# CREATE OR GET CHAT ROOM
+@app.route("/chattingapp/createorgetchatroom", methods=["POST"])
+def create_or_get_chat_room_route():
+    try:
+        data = request.get_json()
+        user_id_first = data.get("user_id_first")
+        user_id_second = data.get("user_id_second")
+
+        if not user_id_first or not user_id_second:
+            return (
+                jsonify({
+                    "status": "error",
+                    "code": 400,
+                    "message": "Missing required parameters: user_id_first, user_id_second",
+                    "data": [],
+                }),
+                400,
+            )
+
+        result = funcCreateOrGetChatRoom(user_id_first, user_id_second)
+        status_code = 200 if result["status"] == "success" else 500
+
+        return jsonify(result), status_code
+
+    except Exception as e:
+        return (
+            jsonify({"status": "error", "code": 500, "message": str(e), "data": []}),
+            500,
+        )
+    
+# GET MESSAGES FOR ROOM
+@app.route("/chattingapp/getmessages", methods=["GET"])
+def get_messages_route():
+    try:
+        room_id = request.args.get("room_id")
+        viewer = request.args.get("viewer")  # viewer's user_id
+        if not room_id or not viewer:
+            return jsonify({"status":"error","code":400,"message":"Missing room_id or viewer","data":[]}), 400
+
+        res = funcGetMessagesForRoom(room_id, viewer)
+        status_code = 200 if res["status"] == "success" else 404
+        return jsonify(res), status_code
+    except Exception as e:
+        return jsonify({"status":"error","code":500,"message":str(e),"data":[]}), 500
+
+@app.route("/chattingapp/sendmessage", methods=["POST"])
+def send_message_route():
+    try:
+        data = request.get_json()
+        room_id = data.get("room_id")
+        sender = data.get("sender_id")
+        message_obj = data.get("message")
+
+        if not room_id or not sender or message_obj is None:
+            return jsonify({"status":"error","code":400,"message":"Missing room_id, sender_id or message","data":[]}), 400
+
+        res = funcSendMessage(room_id, sender, message_obj)
+        status_code = 200 if res["status"] == "success" else 404
+        return jsonify(res), status_code
+    except Exception as e:
+        return jsonify({"status":"error","code":500,"message":str(e),"data":[]}), 500
+
+@app.route("/chattingapp/deletemessage", methods=["DELETE"])
+def delete_message_route():
+    try:
+        message_id = request.args.get("message_id")
+        if not message_id:
+            return jsonify({"status":"error","code":400,"message":"Missing message_id","data":[]}), 400
+        res = funcDeleteMessage(message_id)
+        code = 200 if res["status"] == "success" else 404
+        return jsonify(res), code
+    except Exception as e:
+        return jsonify({"status":"error","code":500,"message":str(e),"data":[]}), 500
+
