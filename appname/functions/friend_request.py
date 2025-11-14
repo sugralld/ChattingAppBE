@@ -1,12 +1,12 @@
 from appname.config import *
 from datetime import datetime
-import uuid
 
-from appname.datas.add_friend import *
+from appname.datas.friend_request import *
 
-def funcSearchFriendByUsername(user_id, keyword, limit=10, page=1):
+def funcGetFriendRequests(receiver, limit=10, page=1):
     try:
-        results = searchFriendByUsername(user_id, keyword, limit, page)
+        results = getFriendRequests(receiver, limit, page)
+
         if isinstance(results, dict) and "error" in results:
             return {
                 "status": "error",
@@ -15,18 +15,39 @@ def funcSearchFriendByUsername(user_id, keyword, limit=10, page=1):
                 "data": [],
             }
 
-        return {"status": "success", "code": 0, "message": "", "data": results}
+        formatted_data = []
+        for row in results:
+            formatted_data.append(
+                {
+                    "request_id": row.get("request_id"),
+                    "sender_id": row.get("sender"),
+                    "sender_username": row.get("sender_username"),
+                    "receiver": row.get("receiver"),
+                    "sent_at": row.get("sent_at"),
+                    "status": row.get("status"),
+                }
+            )
+
+        return {
+            "status": "success",
+            "count": len(formatted_data),
+            "code": 0,
+            "message": "",
+            "data": formatted_data,
+        }
+
     except Exception as e:
         return {"status": "error", "code": 500, "message": str(e), "data": []}
 
 
-def funcSendFriendRequest(sender_id, receiver_id):
+def funcRejectFriendRequest(request_id):
     try:
-        result = sendFriendRequest(sender_id, receiver_id)
+        result = rejectFriendRequest(request_id)
+
         if isinstance(result, dict) and "error" in result:
             return {
                 "status": "error",
-                "code": 400,
+                "code": 404,
                 "message": result["error"],
                 "data": [],
             }
@@ -35,19 +56,21 @@ def funcSendFriendRequest(sender_id, receiver_id):
             "status": "success",
             "code": 0,
             "message": result["message"],
-            "data": [result],
+            "data": [],
         }
+
     except Exception as e:
         return {"status": "error", "code": 500, "message": str(e), "data": []}
 
 
-def funcAcceptFriendRequest(request_id, sender_id, receiver_id):
+def funcAcceptFriendRequest(request_id):
     try:
-        result = acceptFriendRequest(request_id, sender_id, receiver_id)
+        result = acceptFriendRequest(request_id)
+
         if isinstance(result, dict) and "error" in result:
             return {
                 "status": "error",
-                "code": 400,
+                "code": 404,
                 "message": result["error"],
                 "data": [],
             }
@@ -56,7 +79,8 @@ def funcAcceptFriendRequest(request_id, sender_id, receiver_id):
             "status": "success",
             "code": 0,
             "message": result["message"],
-            "data": [result],
+            "data": {"sender": result["sender"], "receiver": result["receiver"]},
         }
+
     except Exception as e:
         return {"status": "error", "code": 500, "message": str(e), "data": []}
