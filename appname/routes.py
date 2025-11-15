@@ -5,11 +5,8 @@ from appname import app, socketio
 
 # IMPORT FUNCTION
 from appname.config import get_db_connection
-from appname.datas.user_details import *
-from appname.datas.user_login import *
-from appname.datas.user_friends import *
-from appname.datas.friend_request import *
-from appname.datas.chat_room import *
+from appname.functions.user_details import *
+from appname.functions.chat_room import *
 from appname.functions.user_register import *
 from appname.functions.add_friend import *
 from appname.functions.messages import *
@@ -18,6 +15,9 @@ from appname.functions.storage import upload_voice_to_supabase
 from appname.utils.storage_utils import download_from_supabase
 from appname.utils.whisper_utils import call_whisper
 
+from appname.functions.user_login import *
+from appname.functions.user_friends import *
+from appname.functions.friend_request import *
 
 # GET USER DETAIL
 @app.route("/chattingapp/getuserdetails", methods=["GET"])
@@ -415,9 +415,6 @@ def accept_friend_request_route():
 
 
 # ==================  CHAT FRIEND  ==================#
-
-#
-
 
 # CREATE OR GET CHAT ROOM
 @app.route("/chattingapp/createorgetchatroom", methods=["POST"])
