@@ -14,15 +14,12 @@ HOST = os.getenv("host")
 PORT = os.getenv("port")
 DBNAME = os.getenv("dbname")
 
+
 # ✅ Reusable function to connect to the database
 def get_db_connection():
     try:
         conn = psycopg2.connect(
-            user=USER,
-            password=PASSWORD,
-            host=HOST,
-            port=PORT,
-            dbname=DBNAME
+            user=USER, password=PASSWORD, host=HOST, port=PORT, dbname=DBNAME
         )
         return conn
     except Exception as e:

@@ -1,7 +1,10 @@
+import time
+from unittest import result
 from flask import request, jsonify
 from appname import app, socketio
 
 # IMPORT FUNCTION
+from appname.config import get_db_connection
 from appname.datas.user_details import *
 from appname.datas.user_login import *
 from appname.datas.user_friends import *
@@ -10,6 +13,11 @@ from appname.datas.chat_room import *
 from appname.functions.user_register import *
 from appname.functions.add_friend import *
 from appname.functions.messages import *
+from appname.functions.voice_notes import *
+from appname.functions.storage import upload_voice_to_supabase
+from appname.utils.storage_utils import download_from_supabase
+from appname.utils.whisper_utils import call_whisper
+
 
 # GET USER DETAIL
 @app.route("/chattingapp/getuserdetails", methods=["GET"])
@@ -28,6 +36,7 @@ def get_users_route():
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 # GET USER DETAIL BY ID
 @app.route("/chattingapp/getuserdetailsbyid", methods=["GET"])
@@ -48,6 +57,7 @@ def get_user_by_id_route():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
 # INSERT USER DETAIL
 @app.route("/chattingapp/insertuserdetails", methods=["POST"])
 def insert_user_route():
@@ -60,6 +70,7 @@ def insert_user_route():
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 # UPDATE USER DETAIL
 @app.route("/chattingapp/updateuserdetails", methods=["PUT"])
@@ -80,6 +91,7 @@ def update_user_route():
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 # DELETE USER DETAIL
 @app.route("/chattingapp/deleteuserdetails", methods=["DELETE"])
@@ -155,7 +167,8 @@ def register_user_route():
         return jsonify(result), status_code
 
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 # ==================  FRIENDLISTS  ==================#
 # GET USER FRIENDS by user_id
@@ -303,8 +316,8 @@ def reject_friend_request_route():
 @app.route("/chattingapp/searchfriendbyusername", methods=["GET"])
 def search_friend_by_username_route():
     try:
-        user_id = request.args.get('user_id')
-        keyword = request.args.get('keyword')
+        user_id = request.args.get("user_id")
+        keyword = request.args.get("keyword")
         if not keyword:
             return (
                 jsonify(
@@ -324,7 +337,7 @@ def search_friend_by_username_route():
         # ✅ Pass user_id to your function
         result = funcSearchFriendByUsername(user_id, keyword, limit, page)
 
-        status_code = 200 if result.get('status') == 'success' else 500
+        status_code = 200 if result.get("status") == "success" else 500
         return jsonify(result), status_code
 
     except Exception as e:
@@ -395,16 +408,16 @@ def accept_friend_request_route():
         return jsonify(result), status_code
 
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "code": 500,
-            "message": str(e),
-            "data": []
-        }), 500
+        return (
+            jsonify({"status": "error", "code": 500, "message": str(e), "data": []}),
+            500,
+        )
+
 
 # ==================  CHAT FRIEND  ==================#
 
 #
+
 
 # CREATE OR GET CHAT ROOM
 @app.route("/chattingapp/createorgetchatroom", methods=["POST"])
@@ -416,12 +429,14 @@ def create_or_get_chat_room_route():
 
         if not user_id_first or not user_id_second:
             return (
-                jsonify({
-                    "status": "error",
-                    "code": 400,
-                    "message": "Missing required parameters: user_id_first, user_id_second",
-                    "data": [],
-                }),
+                jsonify(
+                    {
+                        "status": "error",
+                        "code": 400,
+                        "message": "Missing required parameters: user_id_first, user_id_second",
+                        "data": [],
+                    }
+                ),
                 400,
             )
 
@@ -435,7 +450,8 @@ def create_or_get_chat_room_route():
             jsonify({"status": "error", "code": 500, "message": str(e), "data": []}),
             500,
         )
-    
+
+
 # GET MESSAGES FOR ROOM
 @app.route("/chattingapp/getmessages", methods=["GET"])
 def get_messages_route():
@@ -443,13 +459,27 @@ def get_messages_route():
         room_id = request.args.get("room_id")
         viewer = request.args.get("viewer")  # viewer's user_id
         if not room_id or not viewer:
-            return jsonify({"status":"error","code":400,"message":"Missing room_id or viewer","data":[]}), 400
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "code": 400,
+                        "message": "Missing room_id or viewer",
+                        "data": [],
+                    }
+                ),
+                400,
+            )
 
         res = funcGetMessagesForRoom(room_id, viewer)
         status_code = 200 if res["status"] == "success" else 404
         return jsonify(res), status_code
     except Exception as e:
-        return jsonify({"status":"error","code":500,"message":str(e),"data":[]}), 500
+        return (
+            jsonify({"status": "error", "code": 500, "message": str(e), "data": []}),
+            500,
+        )
+
 
 @app.route("/chattingapp/sendmessage", methods=["POST"])
 def send_message_route():
@@ -460,23 +490,125 @@ def send_message_route():
         message_obj = data.get("message")
 
         if not room_id or not sender or message_obj is None:
-            return jsonify({"status":"error","code":400,"message":"Missing room_id, sender_id or message","data":[]}), 400
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "code": 400,
+                        "message": "Missing room_id, sender_id or message",
+                        "data": [],
+                    }
+                ),
+                400,
+            )
 
         res = funcSendMessage(room_id, sender, message_obj)
         status_code = 200 if res["status"] == "success" else 404
         return jsonify(res), status_code
     except Exception as e:
-        return jsonify({"status":"error","code":500,"message":str(e),"data":[]}), 500
+        return (
+            jsonify({"status": "error", "code": 500, "message": str(e), "data": []}),
+            500,
+        )
+
 
 @app.route("/chattingapp/deletemessage", methods=["DELETE"])
 def delete_message_route():
     try:
         message_id = request.args.get("message_id")
         if not message_id:
-            return jsonify({"status":"error","code":400,"message":"Missing message_id","data":[]}), 400
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "code": 400,
+                        "message": "Missing message_id",
+                        "data": [],
+                    }
+                ),
+                400,
+            )
         res = funcDeleteMessage(message_id)
         code = 200 if res["status"] == "success" else 404
         return jsonify(res), code
     except Exception as e:
-        return jsonify({"status":"error","code":500,"message":str(e),"data":[]}), 500
+        return (
+            jsonify({"status": "error", "code": 500, "message": str(e), "data": []}),
+            500,
+        )
 
+
+@app.route("/chattingapp/voicenote/upload", methods=["POST"])
+def upload_voice_note_route():
+    try:
+        file = request.files.get("voice")
+        sender_id = request.form.get("sender_id")
+        room_id = request.form.get("room_id")
+        duration = request.form.get("duration_sec")
+
+        if not file or not sender_id or not room_id:
+            return jsonify({"status": "error", "message": "Missing fields"}), 400
+
+        file_name = f"voice_{sender_id}_{room_id}_{int(time.time())}.m4a"
+        file_bytes = file.read()
+
+        media_url = upload_voice_to_supabase(file_name, file_bytes)
+
+        file_size = len(file_bytes)
+        result = insertVoiceNote(sender_id, room_id, media_url, file_size, duration)
+        print(result)
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+
+@app.route("/chattingapp/voicenote/transcribe", methods=["POST"])
+def transcribe_voice_note():
+    try:
+        message_id = request.json.get("message_id")
+        media_url = request.json.get("media_url")
+
+        if not message_id or not media_url:
+            return {"error": "Missing fields"}, 400
+
+        audio_bytes = download_from_supabase(media_url)
+        transcript = call_whisper(audio_bytes)
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT message_id FROM media_messages WHERE media_url = %s LIMIT 1",
+            (media_url,),
+        )
+        row = cur.fetchone()
+        if row and row[0] and str(row[0]) != str(message_id):
+            message_id = str(row[0])
+
+        # Do not overwrite existing transcript with empty result
+        # If transcript is empty string, keep previous value
+        cur.execute(
+            """
+            UPDATE voice_notes
+               SET transcript_text = COALESCE(NULLIF(%s, ''), transcript_text)
+             WHERE message_id = %s
+            """,
+            (transcript or "", message_id),
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        # Inform caller when nothing new was written
+        if not (transcript or "").strip():
+            return {
+                "success": False,
+                "message": "Transcription empty; existing transcript preserved",
+                "transcript": "",
+            }, 200
+
+        return {"success": True, "transcript": transcript}
+
+    except Exception as e:
+        return {"error": str(e)}, 500
