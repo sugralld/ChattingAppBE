@@ -19,6 +19,7 @@ from appname.functions.user_login import *
 from appname.functions.user_friends import *
 from appname.functions.friend_request import *
 
+
 # GET USER DETAIL
 @app.route("/chattingapp/getuserdetails", methods=["GET"])
 def get_users_route():
@@ -415,6 +416,37 @@ def accept_friend_request_route():
 
 
 # ==================  CHAT FRIEND  ==================#
+
+
+# LIST CHAT ROOMS FOR USER
+@app.route("/chattingapp/getchatroomlist", methods=["GET"])
+def get_chat_room_list_route():
+    try:
+        user_id = request.args.get("user_id")
+        if not user_id:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "code": 400,
+                        "message": "Missing required parameter: user_id",
+                        "data": [],
+                    }
+                ),
+                400,
+            )
+        limit = int(request.args.get("limit", 10))
+        page = int(request.args.get("page", 1))
+        search = request.args.get("search")
+        result = funcGetChatRoomList(user_id, limit, page, search)
+        status_code = 200 if result.get("status") == "success" else 500
+        return jsonify(result), status_code
+    except Exception as e:
+        return (
+            jsonify({"status": "error", "code": 500, "message": str(e), "data": []}),
+            500,
+        )
+
 
 # CREATE OR GET CHAT ROOM
 @app.route("/chattingapp/createorgetchatroom", methods=["POST"])

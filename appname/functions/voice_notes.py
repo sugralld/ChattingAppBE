@@ -11,7 +11,7 @@ import uuid
 def insertVoiceNote(sender_id, room_id, media_url, file_size, duration_sec):
     conn = get_db_connection()
     cur = conn.cursor()
-    print("Inserting voice note...")    
+    print("Inserting voice note...")
 
     try:
         message_id = str(uuid.uuid4())
@@ -19,7 +19,7 @@ def insertVoiceNote(sender_id, room_id, media_url, file_size, duration_sec):
         cur.execute(
             """
             INSERT INTO messages (message_id, sender_id, room_id, message_type)
-            VALUES (%s, %s, %s, 'voice')
+            VALUES (%s, %s, %s, 'voice');
         """,
             (message_id, sender_id, room_id),
         )
@@ -38,6 +38,17 @@ def insertVoiceNote(sender_id, room_id, media_url, file_size, duration_sec):
             VALUES (%s, %s)
         """,
             (message_id, duration_sec),
+        )
+
+        # Update chat_room summary to reflect latest voice message
+        cur.execute(
+            """
+            UPDATE chat_room
+               SET last_message = %s,
+                   last_message_at = (SELECT sent_at FROM messages WHERE message_id = %s)
+             WHERE room_id = %s;
+            """,
+            ("[Voice]", message_id, room_id),
         )
 
         conn.commit()

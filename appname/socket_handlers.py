@@ -1,6 +1,6 @@
 from appname import socketio
 from flask import request
-from appname.datas.chat_room import funcCreateOrGetChatRoom
+from appname.functions.chat_room import funcCreateOrGetChatRoom
 import sys, os
 import json
 
@@ -12,9 +12,11 @@ from appname.functions.messages import sendMessage
 # Online users: { user_id: session_id }
 online_users = {}
 
+
 @socketio.on("connect")
 def handle_connect():
     print(f"🔗 Connected SID: {request.sid}")
+
 
 @socketio.on("disconnect")
 def handle_disconnect():
@@ -22,6 +24,7 @@ def handle_disconnect():
         if sid == request.sid:
             del online_users[user_id]
             print(f"❌ User {user_id} disconnected")
+
 
 @socketio.on("register_user")
 def handle_register_user(data):
@@ -31,6 +34,7 @@ def handle_register_user(data):
     user_id = str(data.get("user_id"))
     online_users[user_id] = request.sid
     print(f"🟢 User {user_id} is online, SID: {request.sid}")
+
 
 @socketio.on("send_message")
 def handle_send_message(data):
@@ -46,7 +50,11 @@ def handle_send_message(data):
     message_obj = data.get("message")
 
     if not sender or not receiver or not message_obj:
-        socketio.emit("error", {"message": "Missing sender, receiver or message"}, room=request.sid)
+        socketio.emit(
+            "error",
+            {"message": "Missing sender, receiver or message"},
+            room=request.sid,
+        )
         return
 
     # 1️⃣ Get or create chat room
@@ -62,18 +70,26 @@ def handle_send_message(data):
 
     # 3️⃣ Emit to sender
     if sender in online_users:
-        socketio.emit("new_message", {
-            "room_id": room_id,
-            "message": message_obj,
-            "sender_id": sender,
-            "message_id": result.get("message_id")
-        }, room=online_users[sender])
+        socketio.emit(
+            "new_message",
+            {
+                "room_id": room_id,
+                "message": message_obj,
+                "sender_id": sender,
+                "message_id": result.get("message_id"),
+            },
+            room=online_users[sender],
+        )
 
     # 4️⃣ Emit to receiver if online
     if receiver in online_users:
-        socketio.emit("new_message", {
-            "room_id": room_id,
-            "message": message_obj,
-            "sender_id": sender,
-            "message_id": result.get("message_id")
-        }, room=online_users[receiver])
+        socketio.emit(
+            "new_message",
+            {
+                "room_id": room_id,
+                "message": message_obj,
+                "sender_id": sender,
+                "message_id": result.get("message_id"),
+            },
+            room=online_users[receiver],
+        )
