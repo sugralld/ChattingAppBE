@@ -659,3 +659,23 @@ def transcribe_voice_note():
 
     except Exception as e:
         return {"error": str(e)}, 500
+
+
+@app.route("/chattingapp/translateasl", methods=["POST"])
+def translate_asl_route():
+    try:
+        data = request.get_json()
+        video_url = data.get("video_url")
+        room_id = data.get("room_id")
+        frame_rate = data.get("frame_rate")
+        resolution = data.get("resolution")
+
+        if not video_url or not room_id or not frame_rate or not resolution:
+            return jsonify({"status":"error","code":400,"message":"Missing required keys","data":[]}), 400
+
+        res = funcTranslateVideoToText(room_id, video_url, frame_rate, resolution)
+        status_code = 200 if res["status"] == "success" else 500
+        return jsonify(res), status_code
+
+    except Exception as e:
+        return jsonify({"status":"error","code":500,"message":str(e),"data":[]}), 500
