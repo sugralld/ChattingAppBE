@@ -492,7 +492,7 @@ def delete_message_route():
         if not message_id:
             return jsonify({"status":"error","code":400,"message":"Missing message_id","data":[]}), 400
         res = funcDeleteMessage(message_id)
-        code = 200 if res["status"] == "success" else 404
+        code = 200 if res["status"] == "success" else 404 
         return jsonify(res), code
     except Exception as e:
         return jsonify({"status":"error","code":500,"message":str(e),"data":[]}), 500
