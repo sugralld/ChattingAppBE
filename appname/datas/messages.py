@@ -3,53 +3,79 @@ from datetime import datetime
 import json
 
 from flask import request, jsonify
-from flask_socketio import SocketIO, emit 
+from flask_socketio import SocketIO, emit
+
 
 def sendMessage(room_id, sender_id, message_obj):
     """
-    Save a message to the database.
-    Returns {"success": True, "message_id": ...} or {"error": "..."}.
-    Generates message_id like M00001, M00002, etc.
+    New schema insert for text messages:
+      - Insert into messages (UUID, sender_id, room_id, message_type='text')
+      - Insert into text_messages with the same message_id
     """
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # 1) check room exists
-        cur.execute("SELECT user_id_first, user_id_second FROM chat_room WHERE room_id = %s LIMIT 1;", (room_id,))
+        # Validate room
+        cur.execute(
+            "SELECT user_id_first, user_id_second FROM chat_room WHERE room_id = %s LIMIT 1;",
+            (room_id,),
+        )
         room = cur.fetchone()
         if not room:
             return {"error": "Room not found"}
         db_first, db_second = room[0], room[1]
 
-        if sender_id != db_first and sender_id != db_second:
+        if sender_id not in (db_first, db_second):
             return {"error": "Sender not a participant of this room"}
 
-        now = datetime.utcnow()
+        if not isinstance(message_obj, dict):
+            return {"error": "Invalid message payload"}
 
-        # 2) generate custom message_id
-        cur.execute("SELECT message_id FROM message ORDER BY message_id DESC LIMIT 1;")
-        last = cur.fetchone()
-        if last and last[0].startswith("M"):
-            last_num = int(last[0][1:])
-            new_msg_id = f"M{last_num + 1:05d}"  # M00001, M00002...
-        else:
-            new_msg_id = "M00001"
+        msg_type = message_obj.get("type")
+        if msg_type != "text":
+            return {"error": "Unsupported message type for this endpoint"}
 
-        # 3) insert message depending on sender
-        if sender_id == db_first:
-            cur.execute("""
-                INSERT INTO message (message_id, room_id, message_first, message_second, user_id_first, user_id_second, sent_at_first)
-                VALUES (%s, %s, %s, %s, %s, %s, %s);
-            """, (new_msg_id, room_id, json.dumps(message_obj), None, db_first, db_second, now))
-        else:
-            cur.execute("""
-                INSERT INTO message (message_id, room_id, message_first, message_second, user_id_first, user_id_second, sent_at_second)
-                VALUES (%s, %s, %s, %s, %s, %s, %s);
-            """, (new_msg_id, room_id, None, json.dumps(message_obj), db_first, db_second, now))
+        text_content = (message_obj.get("content") or "").strip()
+        if not text_content:
+            return {"error": "Empty text content"}
+
+        # Insert into messages and text_messages
+        cur.execute(
+            """
+            INSERT INTO messages (sender_id, room_id, message_type)
+            VALUES (%s, %s, 'text')
+            RETURNING message_id, sent_at;
+            """,
+            (sender_id, room_id),
+        )
+        row = cur.fetchone()
+        message_id, sent_at = row[0], row[1]
+
+        cur.execute(
+            """
+            INSERT INTO text_messages (message_id, text_content)
+            VALUES (%s, %s)
+            """,
+            (message_id, text_content),
+        )
+
+        # Update chat_room summary
+        cur.execute(
+            """
+            UPDATE chat_room
+               SET last_message = %s,
+                   last_message_at = %s
+             WHERE room_id = %s;
+            """,
+            (text_content, sent_at, room_id),
+        )
 
         conn.commit()
-        # ✅ Return the formatted Mxxxxx ID
-        return {"success": True, "message": "Message sent", "message_id": new_msg_id}
+        return {
+            "success": True,
+            "message": "Message sent",
+            "message_id": str(message_id),
+        }
 
     except Exception as e:
         conn.rollback()
@@ -66,63 +92,73 @@ def getMessagesForRoom(room_id, viewer_user_id):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # 1) check room exists
-        cur.execute("SELECT user_id_first, user_id_second FROM chat_room WHERE room_id = %s LIMIT 1;", (room_id,))
+        # Validate room and membership
+        cur.execute(
+            "SELECT user_id_first, user_id_second FROM chat_room WHERE room_id = %s LIMIT 1;",
+            (room_id,),
+        )
         room = cur.fetchone()
         if not room:
             return {"error": "Room not found"}
-
         db_user_first, db_user_second = room[0], room[1]
-
-        # 2) fetch messages for room ordered by time (earliest -> latest)
-        cur.execute("""
-            SELECT message_id, room_id, message_first, message_second, user_id_first, user_id_second,
-                   sent_at_first, sent_at_second
-            FROM message
-            WHERE room_id = %s
-            ORDER BY COALESCE(sent_at_first, sent_at_second) ASC, message_id ASC;
-        """, (room_id,))
-        rows = cur.fetchall()
-
-        # 3) Decide if viewer is in same orientation or reversed
-        reversed_view = False
-        if viewer_user_id == db_user_second and viewer_user_id != db_user_first:
-            reversed_view = True
-        elif viewer_user_id != db_user_first and viewer_user_id != db_user_second:
+        if viewer_user_id not in (db_user_first, db_user_second):
             return {"error": "Viewer not a participant of this room"}
 
-        # 4) Build message list with reversal applied only to output (no DB changes)
+        # Fetch unified messages
+        cur.execute(
+            """
+            SELECT m.message_id,
+                   m.room_id,
+                   m.sender_id,
+                   m.message_type,
+                   m.sent_at,
+                   tm.text_content,
+                   mm.media_url,
+                   vn.duration_sec,
+                   vn.transcript_text
+              FROM messages m
+              LEFT JOIN text_messages tm ON tm.message_id = m.message_id
+              LEFT JOIN voice_notes vn ON vn.message_id = m.message_id
+              LEFT JOIN media_messages mm ON mm.message_id = m.message_id
+             WHERE m.room_id = %s
+             ORDER BY m.sent_at ASC, m.message_id ASC;
+            """,
+            (room_id,),
+        )
+        rows = cur.fetchall()
+
         messages = []
         for r in rows:
-            message_id, room_id, m_first, m_second, u_first, u_second, t_first, t_second = r
-            if not reversed_view:
-                messages.append({
-                    "message_id": message_id,
-                    "room_id": room_id,
-                    "message_first": m_first,
-                    "message_second": m_second,
-                    "user_id_first": u_first,
-                    "user_id_second": u_second,
-                    "sent_at_first": t_first,
-                    "sent_at_second": t_second,
-                    "sent_at": t_first if t_first is not None else t_second,
-                    "sender": u_first if t_first is not None else u_second,
-                })
-            else:
-                messages.append({
-                    "message_id": message_id,
-                    "room_id": room_id,
-                    "message_first": m_second,
-                    "message_second": m_first,
-                    "user_id_first": u_second,
-                    "user_id_second": u_first,
-                    "sent_at_first": t_second,
-                    "sent_at_second": t_first,
-                    "sent_at": t_second if t_second is not None else t_first,
-                    "sender": u_second if t_second is not None else u_first,
-                })
+            (
+                message_id,
+                r_id,
+                sender_id,
+                message_type,
+                sent_at,
+                text_content,
+                media_url,
+                duration_sec,
+                transcript_text,
+            ) = r
+            messages.append(
+                {
+                    "message_id": str(message_id),
+                    "room_id": r_id,
+                    "sender_id": sender_id,
+                    "message_type": message_type,
+                    "content": text_content if message_type == "text" else None,
+                    "media_url": (
+                        media_url if message_type in ("voice", "video") else None
+                    ),
+                    "duration_sec": (
+                        int(duration_sec) if duration_sec is not None else None
+                    ),
+                    "transcript_text": transcript_text,
+                    "sent_at": sent_at,
+                }
+            )
 
-        return {"success": True, "room_id": room_id, "viewer_reversed": reversed_view, "messages": messages}
+        return {"success": True, "room_id": room_id, "messages": messages}
 
     except Exception as e:
         return {"error": str(e)}
