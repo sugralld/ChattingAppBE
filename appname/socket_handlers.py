@@ -1,6 +1,6 @@
 from appname import socketio
 from flask import request
-from appname.datas.chat_room import funcCreateOrGetChatRoom
+from appname.functions.chat_room import *
 import sys, os
 import json
 

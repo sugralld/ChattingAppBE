@@ -10,6 +10,8 @@ from appname.functions.messages import *
 from appname.functions.user_login import *
 from appname.functions.user_friends import *
 from appname.functions.friend_request import *
+from appname.functions.user_chat_list import *
+from appname.functions.translate_video_to_text import *
 
 # GET USER DETAIL
 @app.route("/chattingapp/getuserdetails", methods=["GET"])
@@ -435,6 +437,23 @@ def create_or_get_chat_room_route():
         )
     
 # GET MESSAGES FOR ROOM
+@app.route("/chattingapp/getchatroomlist", methods=["GET"])
+def get_chatroom_list_route():
+    try:
+        user_id = request.args.get("user_id")
+        limit = request.args.get("limit", type=int)
+        page = request.args.get("page", type=int)
+        search = request.args.get("search", default="")
+
+        if not user_id or not limit or not page:
+            return jsonify({"status": "error", "code": 400, "message": "Missing user_id, limit, or page", "data": []}), 400
+
+        res = funcGetChatRoomList(user_id, limit, page, search)
+        status_code = 200 if res["status"] == "success" else 404
+        return jsonify(res), status_code
+    except Exception as e:
+        return jsonify({"status": "error", "code": 500, "message": str(e), "data": []}), 500
+
 @app.route("/chattingapp/getmessages", methods=["GET"])
 def get_messages_route():
     try:
@@ -478,3 +497,21 @@ def delete_message_route():
     except Exception as e:
         return jsonify({"status":"error","code":500,"message":str(e),"data":[]}), 500
 
+@app.route("/chattingapp/translateasl", methods=["POST"])
+def translate_asl_route():
+    try:
+        data = request.get_json()
+        video_url = data.get("video_url")
+        room_id = data.get("room_id")
+        frame_rate = data.get("frame_rate")
+        resolution = data.get("resolution")
+
+        if not video_url or not room_id or not frame_rate or not resolution:
+            return jsonify({"status":"error","code":400,"message":"Missing required keys","data":[]}), 400
+
+        res = funcTranslateVideoToText(room_id, video_url, frame_rate, resolution)
+        status_code = 200 if res["status"] == "success" else 500
+        return jsonify(res), status_code
+
+    except Exception as e:
+        return jsonify({"status":"error","code":500,"message":str(e),"data":[]}), 500

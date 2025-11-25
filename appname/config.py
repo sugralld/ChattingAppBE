@@ -27,3 +27,6 @@ def get_db_connection():
         return conn
     except Exception as e:
         raise Exception(f"Failed to connect: {e}")
+
+# ASL API configuration
+ASL_API_URL = "http://localhost:5001"

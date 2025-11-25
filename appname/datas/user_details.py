@@ -1,6 +1,4 @@
 from appname.config import *
-import bcrypt
-import re
 
 # GET USER DETAIL
 def getUserDetail(limit=10, page=1):
