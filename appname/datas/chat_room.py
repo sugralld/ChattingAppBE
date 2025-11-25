@@ -3,6 +3,7 @@ from datetime import datetime
 import json
 from appname import socketio
 
+
 def createOrGetChatRoom(user_id_first, user_id_second):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -87,15 +88,23 @@ def createOrGetChatRoom(user_id_first, user_id_second):
         cur.close()
         conn.close()
 
+
 def sendMessage(room_id, sender_id, message_obj):
     """
-    Save a message to the database with message_id like M00001, M00002.
+    Insert a message using the new normalized schema:
+      - messages (message metadata)
+      - text_messages (for text content)
+
+    Only supports type == 'text' here; media uploads use dedicated endpoints.
     """
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # 1) Check room exists
-        cur.execute("SELECT user_id_first, user_id_second FROM chat_room WHERE room_id = %s LIMIT 1;", (room_id,))
+        # 1) Validate room and participant
+        cur.execute(
+            "SELECT user_id_first, user_id_second FROM chat_room WHERE room_id = %s LIMIT 1;",
+            (room_id,),
+        )
         room = cur.fetchone()
         if not room:
             return {"error": "Room not found"}
@@ -104,50 +113,57 @@ def sendMessage(room_id, sender_id, message_obj):
         if sender_id != db_first and sender_id != db_second:
             return {"error": "Sender not a participant of this room"}
 
-        now = datetime.utcnow()
+        # 2) Determine type and content
+        if not isinstance(message_obj, dict):
+            return {"error": "Invalid message payload"}
 
-        # 2) Generate new message_id - FIXED for text message_id
-        cur.execute("""
-            SELECT message_id FROM message
-            ORDER BY message_id DESC
-            LIMIT 1;
-        """)
-        last = cur.fetchone()
-        if last:
-            # Extract numeric part from text like "M00001"
-            last_num = int(last[0][1:])  # Remove "M" and convert to int
-            new_msg_id = f"M{last_num + 1:05d}"
-        else:
-            new_msg_id = "M00001"
+        msg_type = message_obj.get("type")
+        if msg_type != "text":
+            # For voice/video, use dedicated upload endpoints
+            return {"error": "Unsupported message type for this endpoint"}
 
-        # 3) Insert into message table
-        if sender_id == db_first:
-            cur.execute("""
-                INSERT INTO message (
-                    message_id, room_id, message_first, message_second, user_id_first, user_id_second, sent_at_first
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s);
-            """, (new_msg_id, room_id, json.dumps(message_obj), None, db_first, db_second, now))
-        else:
-            cur.execute("""
-                INSERT INTO message (
-                    message_id, room_id, message_first, message_second, user_id_first, user_id_second, sent_at_second
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s);
-            """, (new_msg_id, room_id, None, json.dumps(message_obj), db_first, db_second, now))
+        text_content = message_obj.get("content", "").strip()
+        if not text_content:
+            return {"error": "Empty text content"}
 
-        # 4) Update chat_room last_message and last_message_at
-        if isinstance(message_obj, dict):
-            last_message_text = message_obj.get("text", str(message_obj))
-        else:
-            last_message_text = str(message_obj)
-            
-        cur.execute("""
+        # 3) Insert into messages and text_messages
+        # messages.message_id is UUID in new schema
+        cur.execute(
+            """
+            INSERT INTO messages (sender_id, room_id, message_type)
+            VALUES (%s, %s, 'text')
+            RETURNING message_id, sent_at;
+            """,
+            (sender_id, room_id),
+        )
+        row = cur.fetchone()
+        message_id, sent_at = row[0], row[1]
+
+        cur.execute(
+            """
+            INSERT INTO text_messages (message_id, text_content)
+            VALUES (%s, %s)
+            """,
+            (message_id, text_content),
+        )
+
+        # 4) Update chat_room summary
+        cur.execute(
+            """
             UPDATE chat_room
-            SET last_message = %s, last_message_at = %s
-            WHERE room_id = %s;
-        """, (last_message_text, now, room_id))
+               SET last_message = %s,
+                   last_message_at = %s
+             WHERE room_id = %s;
+            """,
+            (text_content, sent_at, room_id),
+        )
 
         conn.commit()
-        return {"success": True, "message": "Message sent", "message_id": new_msg_id}
+        return {
+            "success": True,
+            "message": "Message sent",
+            "message_id": str(message_id),
+        }
 
     except Exception as e:
         conn.rollback()
@@ -156,58 +172,142 @@ def sendMessage(room_id, sender_id, message_obj):
         cur.close()
         conn.close()
 
+
 # CORE: delete a message and recalc chat_room last_message
 def deleteMessage(message_id):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        # 1) find room_id for this message
-        cur.execute("SELECT room_id FROM message WHERE message_id = %s LIMIT 1;", (message_id,))
+        # 1) find room_id for this message in new schema
+        cur.execute(
+            "SELECT room_id FROM messages WHERE message_id = %s LIMIT 1;",
+            (message_id,),
+        )
         row = cur.fetchone()
         if not row:
             return {"error": "Message not found"}
         room_id = row[0]
 
-        # 2) delete the message
-        cur.execute("DELETE FROM message WHERE message_id = %s;", (message_id,))
+        # 2) delete the message (cascades delete children like text_messages/voice_notes)
+        cur.execute("DELETE FROM messages WHERE message_id = %s;", (message_id,))
 
-        # 3) recalc last_message for the room (pick latest sent_at among remaining messages)
-        cur.execute("""
-            SELECT message_first, message_second, sent_at_first, sent_at_second
-            FROM message
-            WHERE room_id = %s
-            ORDER BY COALESCE(sent_at_first, sent_at_second) DESC, message_id DESC
-            LIMIT 1;
-        """, (room_id,))
+        # 3) recalc last message summary for room from remaining messages
+        cur.execute(
+            """
+            SELECT m.message_id, m.message_type, m.sent_at,
+                   tm.text_content,
+                   mm.media_url
+              FROM messages m
+              LEFT JOIN text_messages tm ON tm.message_id = m.message_id
+              LEFT JOIN media_messages mm ON mm.message_id = m.message_id
+             WHERE m.room_id = %s
+             ORDER BY m.sent_at DESC
+             LIMIT 1;
+            """,
+            (room_id,),
+        )
         last = cur.fetchone()
         if last:
-            m_first, m_second, t_first, t_second = last
-            if t_first is None and t_second is None:
-                last_text = None
-                last_time = None
+            _, msg_type, last_time, text_content, media_url = last
+            if msg_type == "text":
+                last_text = text_content or ""
+            elif msg_type == "voice":
+                last_text = "[Voice]"
+            elif msg_type == "video":
+                last_text = "[Video]"
             else:
-                if (t_first or datetime.min) >= (t_second or datetime.min):
-                    # first is latest
-                    last_text = (m_first.get("text") if isinstance(m_first, dict) else (json.loads(m_first).get("text") if m_first else None)) if m_first else None
-                    last_time = t_first
-                else:
-                    last_text = (m_second.get("text") if isinstance(m_second, dict) else (json.loads(m_second).get("text") if m_second else None)) if m_second else None
-                    last_time = t_second
+                last_text = "[Message]"
         else:
             last_text = None
             last_time = None
 
-        cur.execute("""
+        cur.execute(
+            """
             UPDATE chat_room
-            SET last_message = %s, last_message_at = %s
-            WHERE room_id = %s;
-        """, (last_text, last_time, room_id))
+               SET last_message = %s,
+                   last_message_at = %s
+             WHERE room_id = %s;
+            """,
+            (last_text, last_time, room_id),
+        )
 
         conn.commit()
         return {"success": True, "message": "Message deleted", "room_id": room_id}
 
     except Exception as e:
         conn.rollback()
+        return {"error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+def getChatRoomsForUser(user_id, limit=10, page=1, search=None):
+    """Return list of chat rooms for a user with optional search on friend username."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    offset = (page - 1) * limit
+    try:
+        base_sql = """
+            SELECT c.room_id, c.user_id_first, c.user_id_second,
+                   c.last_message, c.last_message_at,
+                   u1.user_id AS u1_id, u1.username AS u1_username, u1.profile_picture AS u1_pic,
+                   u2.user_id AS u2_id, u2.username AS u2_username, u2.profile_picture AS u2_pic
+            FROM chat_room c
+            JOIN user_detail u1 ON c.user_id_first = u1.user_id
+            JOIN user_detail u2 ON c.user_id_second = u2.user_id
+            WHERE (c.user_id_first = %s OR c.user_id_second = %s)
+        """
+        params = [user_id, user_id]
+        if search:
+            # search applies to the other participant's username
+            base_sql += " AND ( (c.user_id_first = %s AND u2.username ILIKE %s) OR (c.user_id_second = %s AND u1.username ILIKE %s) )"
+            params.extend([user_id, f"%{search}%", user_id, f"%{search}%"])
+        base_sql += " ORDER BY c.last_message_at DESC NULLS LAST, c.room_id DESC LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+        cur.execute(base_sql, params)
+        rows = cur.fetchall()
+        results = []
+        for r in rows:
+            (
+                room_id,
+                u_first,
+                u_second,
+                last_msg,
+                last_at,
+                u1_id,
+                u1_username,
+                u1_pic,
+                u2_id,
+                u2_username,
+                u2_pic,
+            ) = r
+            if user_id == u_first:
+                friend_id, friend_username, friend_pic = u2_id, u2_username, u2_pic
+            else:
+                friend_id, friend_username, friend_pic = u1_id, u1_username, u1_pic
+            # format time consistent for Android parser
+            if last_at:
+                try:
+                    last_at_fmt = last_at.strftime("%a, %d %b %Y %H:%M:%S GMT")
+                except Exception:
+                    last_at_fmt = str(last_at)
+            else:
+                last_at_fmt = ""
+            results.append(
+                {
+                    "room_id": room_id,
+                    "last_message": last_msg or "",
+                    "last_message_at": last_at_fmt,
+                    "friend": {
+                        "user_id": friend_id,
+                        "username": friend_username,
+                        "profile_picture": friend_pic or "",
+                    },
+                }
+            )
+        return {"success": True, "chat_rooms": results}
+    except Exception as e:
         return {"error": str(e)}
     finally:
         cur.close()
