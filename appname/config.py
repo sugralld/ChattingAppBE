@@ -25,5 +25,5 @@ def get_db_connection():
     except Exception as e:
         raise Exception(f"Failed to connect: {e}")
 
-# ASL API configuration
-ASL_API_URL = "http://localhost:5001"
+# Configuration for SIBI API server
+SIBI_API_URL = "http://localhost:5001/api/translate"

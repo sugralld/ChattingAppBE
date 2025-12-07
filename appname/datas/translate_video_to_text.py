@@ -5,6 +5,7 @@ import numpy as np
 from datetime import datetime
 import os
 import requests
+import json
 
 from appname.datas.model_ai import get_asl_translation, fallback_timestamps
 from appname.config import *
@@ -49,80 +50,78 @@ def getTranslationFromVideo(room_id, video_url, frame_rate, resolution):
     cur = conn.cursor()
 
     try:
-        print(f"Starting ASL translation for room {room_id}")
+        print(f"\n{'='*60}")
+        print(f"🎬 STARTING ASL TRANSLATION FOR ROOM {room_id}")
+        print(f"{'='*60}")
+        print(f"Video URL: {video_url}")
+        print(f"Frame rate: {frame_rate}, Resolution: {resolution}")
         
-        # Get video duration efficiently
-        total_duration = get_video_duration(video_url)
-        print(f"📹 Video duration: {total_duration:.2f}s")
-
-        # Use ASL recognition service - get REAL predictions
+        # Use ASL recognition service - get predictions from SIBI model
         predictions = get_asl_translation(video_url)
         
-        # Process the predictions from WLASL API - RETURN WHATEVER WLASL GIVES
+        # Process the predictions
         timestamps = []
         translated_script = "NO_SIGNS_DETECTED"
         
         if predictions and len(predictions) > 0:
-            # We have REAL predictions from the model
-            print(f"✅ Using REAL model predictions: {len(predictions)} timestamps")
+            print(f"✅ Using REAL SIBI model predictions: {len(predictions)} timestamps")
             
             for pred in predictions:
                 if isinstance(pred, dict) and 'second' in pred and 'text' in pred:
-                    # Use the timestamp and text directly from WLASL API
+                    # Use the timestamp and text directly from SIBI API
                     timestamps.append({
-                        "second": pred['second'],
-                        "text": pred['text']
+                        "second": float(pred['second']),
+                        "text": str(pred['text'])
                     })
             
             # Sort by time
             timestamps.sort(key=lambda x: x['second'])
             
-            # Use the most frequent word for database storage
+            # Create full transcript
             if timestamps:
-                word_counts = {}
-                for ts in timestamps:
-                    word = ts['text']
-                    word_counts[word] = word_counts.get(word, 0) + 1
-                most_common_word = max(word_counts.items(), key=lambda x: x[1])[0]
-                translated_script = most_common_word
+                words = [ts['text'] for ts in timestamps]
+                translated_script = " ".join(words)
+                print(f"📝 Full transcript: {translated_script}")
                 
         else:
-            # No real predictions - RETURN EMPTY LIST instead of fallback
-            print("⚠️ No model predictions from WLASL API - returning empty list")
-            # Don't use fallback timestamps - return empty to show real WLASL output
+            print("⚠️ No predictions from SIBI model - returning empty")
             timestamps = []
             translated_script = "NO_SIGNS_DETECTED"
 
         # Insert into database
         cur.execute("""
             INSERT INTO translate_video
-            (room_id, video_url, frame_rate, resolution, translated_script, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            (room_id, video_url, frame_rate, resolution, translated_script, timestamps_json, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, (
             room_id,
             video_url,
             frame_rate,
             resolution,
             translated_script,
+            json.dumps(timestamps, ensure_ascii=False), 
             datetime.now()
         ))
 
         conn.commit()
 
-        print(f"✅ ASL Translation completed: {len(timestamps)} timestamps")
+        print(f"\n✅ ASL Translation COMPLETED")
+        print(f"   Total timestamps: {len(timestamps)}")
         if timestamps:
-            print(f"📝 Final output: {[ts['text'] for ts in timestamps[:5]]}...")
-        else:
-            print("📝 Final output: [] (no signs detected)")
-        return timestamps  # This will be empty if WLASL returned empty
+            print(f"   First 5 predictions:")
+            for ts in timestamps[:5]:
+                print(f"     {ts['second']:.1f}s: {ts['text']}")
+        print(f"{'='*60}\n")
+        
+        return timestamps
 
     except Exception as e:
         print(f"❌ Error in getTranslationFromVideo: {e}")
         import traceback
         traceback.print_exc()
-        # Return empty list on error to be consistent
         return []
 
     finally:
         cur.close()
         conn.close()
+        

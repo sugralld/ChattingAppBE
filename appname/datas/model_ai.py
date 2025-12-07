@@ -1,70 +1,67 @@
-# model_ai.py - Enhanced version
 import requests
 import time
-from appname.config import *
+
+# Configuration for your SIBI API server
+SIBI_API_URL = "http://localhost:5001/api/translate"  # Change to your server IP if needed
 
 def get_asl_translation(video_url):
-    """Get ASL translation from WLASL API"""
-    print(f"🎯 Requesting WLASL translation for: {video_url}")
+    """Get SIBI translation via API"""
+    print(f"🎯 Requesting SIBI translation via API for: {video_url}")
     
     try:
-        # First, test if WLASL API is reachable
-        try:
-            health_response = requests.get(ASL_API_URL + "/health", timeout=5)
-            print(f"🏥 WLASL API Health: {health_response.status_code}")
-            if health_response.status_code == 200:
-                health_data = health_response.json()
-                print(f"📊 Model loaded: {health_data.get('model_loaded')}")
-                print(f"📚 Vocabulary: {health_data.get('vocabulary_size')}")
-        except Exception as e:
-            print(f"⚠️ WLASL API health check failed: {e}")
-        
-        # Now make the translation request
         start_time = time.time()
-        response = requests.post(
-            ASL_API_URL + "/translate",
-            json={"video_url": video_url},
-            timeout=120  # Longer timeout for WLASL translation
-        )
-        processing_time = time.time() - start_time
         
-        print(f"⏱️ WLASL API processing time: {processing_time:.2f}s")
+        # Call your SIBI API server
+        response = requests.post(
+            SIBI_API_URL,
+            json={"video_url": video_url},
+            timeout=600  # 10 minutes timeout for video processing
+        )
+        
+        processing_time = time.time() - start_time
         
         if response.status_code == 200:
             result = response.json()
-            print(f"📨 WLASL API Response status: {result.get('status')}")
-            print(f"📊 Signs detected: {result.get('signs_detected', 0)}")
-            print(f"🎯 Unique signs: {result.get('unique_signs', [])}")
-            print(f"🤖 Model used: {result.get('model_used', 'Unknown')}")
-            
             if result.get("status") == "success":
-                data = result.get("data", [])
-                print(f"✅ WLASL Translation successful: {len(data)} predictions")
-                return data
+                predictions = result.get("data", [])
+                
+                print(f"✅ SIBI API request successful")
+                print(f"⏱️ Processing time: {processing_time:.2f}s")
+                print(f"📊 Signs detected: {len(predictions)}")
+                
+                # Log each detection
+                for pred in predictions[:10]:  # Show first 10
+                    print(f"   - {pred.get('second')}s: {pred.get('text')}")
+                if len(predictions) > 10:
+                    print(f"   ... and {len(predictions) - 10} more")
+                
+                return predictions
             else:
-                print(f"❌ WLASL API error: {result.get('message')}")
+                error_msg = result.get("message", "Unknown error")
+                print(f"❌ SIBI API error: {error_msg}")
                 return []
         else:
-            print(f"❌ WLASL API HTTP error: {response.status_code}")
-            print(f"❌ Response text: {response.text}")
+            print(f"❌ SIBI API HTTP error: {response.status_code}")
+            print(f"Response: {response.text[:200]}")
             return []
             
     except requests.exceptions.Timeout:
-        print("⏰ WLASL translation request timeout")
+        print(f"❌ SIBI API timeout after 600 seconds")
         return []
     except requests.exceptions.ConnectionError:
-        print("🔌 Cannot connect to WLASL API - make sure wlasl_api.py is running on localhost:5001")
+        print(f"❌ Cannot connect to SIBI API at {SIBI_API_URL}")
+        print(f"   Make sure the SIGNLANGUAGE API server is running")
         return []
     except Exception as e:
-        print(f"❌ Error calling WLASL API: {e}")
+        print(f"❌ Error calling SIBI API: {e}")
         return []
-
+    
 def fallback_timestamps(total_duration=4.0):
-    """Fallback when WLASL translation fails"""
+    """Fallback when translation fails"""
     return [
-        {"second": 0.0, "text": "HELLO"},
-        {"second": 1.0, "text": "WLASL"},
-        {"second": 2.0, "text": "TRANSLATION"},
+        {"second": 0.0, "text": "SIGN"},
+        {"second": 1.0, "text": "LANGUAGE"},
+        {"second": 2.0, "text": "DETECTION"},
         {"second": 3.0, "text": "UNAVAILABLE"}
     ]
 
@@ -76,7 +73,39 @@ def preprocess_frames(frames):
     return frames
 
 def get_top_predictions(logits, top_k=3):
-    return [("ASL_RECOGNITION", 1.0)]
+    return [("SIBI_RECOGNITION", 1.0)]
 
 model = None
 processor = None
+
+# Add this function to your model_ai.py
+def generate_srt_from_predictions(predictions, output_path="output.srt"):
+    """Generate SRT subtitle file from predictions"""
+    srt_content = ""
+    
+    for i, pred in enumerate(predictions, 1):
+        start_time = pred["second"]
+        end_time = start_time + 1.0  # Each sign lasts 1 second
+        
+        # Convert seconds to SRT time format
+        start_timestamp = format_timestamp(start_time)
+        end_timestamp = format_timestamp(end_time)
+        
+        srt_content += f"{i}\n"
+        srt_content += f"{start_timestamp} --> {end_timestamp}\n"
+        srt_content += f"{pred['text']}\n\n"
+    
+    # Write to file
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(srt_content)
+    
+    return output_path
+
+def format_timestamp(seconds):
+    """Convert seconds to SRT timestamp format"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds - int(seconds)) * 1000)
+    
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"

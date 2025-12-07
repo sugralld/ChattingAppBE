@@ -11,15 +11,16 @@ from appname.functions.user_register import *
 from appname.functions.add_friend import *
 from appname.functions.messages import *
 from appname.functions.voice_notes import *
-from appname.functions.storage import upload_voice_to_supabase
-from appname.utils.storage_utils import download_from_supabase
-from appname.utils.whisper_utils import call_whisper
+from appname.functions.storage import *
+from appname.utils.storage_utils import *
+from appname.utils.whisper_utils import *
 
 from appname.functions.user_login import *
 from appname.functions.user_friends import *
 from appname.functions.friend_request import *
 from appname.functions.user_chat_list import *
 from appname.functions.translate_video_to_text import *
+from appname.functions.video_notes import *
 
 # GET USER DETAIL
 @app.route("/chattingapp/getuserdetails", methods=["GET"])
@@ -660,7 +661,6 @@ def transcribe_voice_note():
     except Exception as e:
         return {"error": str(e)}, 500
 
-
 @app.route("/chattingapp/translateasl", methods=["POST"])
 def translate_asl_route():
     try:
@@ -669,13 +669,113 @@ def translate_asl_route():
         room_id = data.get("room_id")
         frame_rate = data.get("frame_rate")
         resolution = data.get("resolution")
+        generate_srt = data.get("generate_srt", False)
 
         if not video_url or not room_id or not frame_rate or not resolution:
             return jsonify({"status":"error","code":400,"message":"Missing required keys","data":[]}), 400
 
         res = funcTranslateVideoToText(room_id, video_url, frame_rate, resolution)
+        
+        # Generate SRT file if requested (using local function)
+        if generate_srt and res["status"] == "success" and res["data"]:
+            from appname.datas.model_ai import generate_srt_from_predictions
+            srt_path = generate_srt_from_predictions(res["data"], f"subtitles_room_{room_id}.srt")
+            res["srt_file"] = srt_path
+        
         status_code = 200 if res["status"] == "success" else 500
         return jsonify(res), status_code
 
     except Exception as e:
         return jsonify({"status":"error","code":500,"message":str(e),"data":[]}), 500
+    
+@app.route("/chattingapp/uploadvideonote", methods=["POST"])
+def upload_video_note_route():
+    try:
+        file = request.files.get("video")
+        resolution = request.form.get("resolution")
+        frame_rate = request.form.get("frame_rate")
+
+        if not file or not resolution or not frame_rate:
+            return jsonify({
+                "status": "error",
+                "code": 400,
+                "message": "Missing fields: video, resolution, frame_rate are required",
+                "data": []
+            }), 400
+
+        file_bytes = file.read()
+        file_size = len(file_bytes)
+
+        file_name = f"video_temp_{int(time.time())}.mp4"
+        media_url = upload_video_to_supabase(file_name, file_bytes)
+
+        result = funcUploadVideoNote(media_url, file_size, resolution, frame_rate)
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "code": 500,
+            "message": str(e),
+            "data": []
+        }), 500
+
+
+@app.route("/chattingapp/sendvideonote", methods=["POST"])
+def send_video_note_route():
+    try:
+        data = request.json
+        sender_id = data.get("sender_id")
+        room_id = data.get("room_id")
+        media_url = data.get("media_url")
+        file_size = data.get("file_size")
+        resolution = data.get("resolution")
+        frame_rate = data.get("frame_rate")
+
+        if not sender_id or not room_id or not media_url:
+            return jsonify({
+                "status": "error",
+                "code": 400,
+                "message": "Missing fields: sender_id, room_id, media_url required",
+                "data": []
+            }), 400
+
+        result = funcSendVideoNote(sender_id, room_id, media_url, file_size, resolution, frame_rate)
+        status_code = 200 if result["status"] == "success" else 400
+        return jsonify(result), status_code
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "code": 500,
+            "message": str(e),
+            "data": []
+        }), 500
+
+
+@app.route("/chattingapp/getvideonotes", methods=["GET"])
+def get_video_notes_route():
+    try:
+        room_id = request.args.get("room_id")
+        limit = int(request.args.get("limit", 20))
+        page = int(request.args.get("page", 1))
+
+        if not room_id:
+            return jsonify({
+                "status": "error",
+                "code": 400,
+                "message": "Missing required parameter: room_id",
+                "data": [],
+            }), 400
+
+        result = funcGetVideoNotes(room_id, limit, page)
+        status_code = 200 if result["status"] == "success" else 400
+        return jsonify(result), status_code
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "code": 500,
+            "message": str(e),
+            "data": [],
+        }), 500

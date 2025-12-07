@@ -18,3 +18,17 @@ def upload_voice_to_supabase(file_name, file_bytes):
 
     public_url = supabase.storage.from_(bucket).get_public_url(file_name)
     return public_url
+
+
+def upload_video_to_supabase(file_name, file_bytes):
+    bucket = "videos"
+
+    res = supabase.storage.from_(bucket).upload(
+        file_name, file_bytes, {"content-type": "video/mp4"}
+    )
+
+    if res is None:
+        raise Exception("Upload failed")
+
+    public_url = supabase.storage.from_(bucket).get_public_url(file_name)
+    return public_url
