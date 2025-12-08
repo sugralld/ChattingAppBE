@@ -493,13 +493,27 @@ def get_chatroom_list_route():
         search = request.args.get("search", default="")
 
         if not user_id or not limit or not page:
-            return jsonify({"status": "error", "code": 400, "message": "Missing user_id, limit, or page", "data": []}), 400
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "code": 400,
+                        "message": "Missing user_id, limit, or page",
+                        "data": [],
+                    }
+                ),
+                400,
+            )
 
         res = funcGetChatRoomList(user_id, limit, page, search)
         status_code = 200 if res["status"] == "success" else 404
         return jsonify(res), status_code
     except Exception as e:
-        return jsonify({"status": "error", "code": 500, "message": str(e), "data": []}), 500
+        return (
+            jsonify({"status": "error", "code": 500, "message": str(e), "data": []}),
+            500,
+        )
+
 
 @app.route("/chattingapp/getmessages", methods=["GET"])
 def get_messages_route():
@@ -521,6 +535,34 @@ def get_messages_route():
 
         res = funcGetMessagesForRoom(room_id, viewer)
         status_code = 200 if res["status"] == "success" else 404
+        return jsonify(res), status_code
+    except Exception as e:
+        return (
+            jsonify({"status": "error", "code": 500, "message": str(e), "data": []}),
+            500,
+        )
+
+
+# GET SINGLE MESSAGE BY ID (for realtime updates)
+@app.route("/chattingapp/getmessage/<message_id>", methods=["GET"])
+def get_single_message_route(message_id):
+    try:
+        viewer = request.args.get("viewer")
+        if not viewer:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "code": 400,
+                        "message": "Missing viewer parameter",
+                        "data": [],
+                    }
+                ),
+                400,
+            )
+
+        res = funcGetSingleMessage(message_id, viewer)
+        status_code = 200 if res["status"] == "success" else res.get("code", 404)
         return jsonify(res), status_code
     except Exception as e:
         return (
@@ -577,7 +619,7 @@ def delete_message_route():
                 400,
             )
         res = funcDeleteMessage(message_id)
-        code = 200 if res["status"] == "success" else 404 
+        code = 200 if res["status"] == "success" else 404
         return jsonify(res), code
     except Exception as e:
         return (
@@ -644,6 +686,13 @@ def transcribe_voice_note():
             """,
             (transcript or "", message_id),
         )
+
+        # ✅ CRITICAL: Update messages.updated_at to trigger Realtime UPDATE event
+        cur.execute(
+            "UPDATE messages SET updated_at = NOW() WHERE message_id = %s",
+            (message_id,),
+        )
+
         conn.commit()
         cur.close()
         conn.close()
@@ -672,7 +721,17 @@ def translate_asl_route():
         generate_srt = data.get("generate_srt", False)
 
         if not video_url or not room_id or not frame_rate or not resolution:
-            return jsonify({"status":"error","code":400,"message":"Missing required keys","data":[]}), 400
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "code": 400,
+                        "message": "Missing required keys",
+                        "data": [],
+                    }
+                ),
+                400,
+            )
 
         res = funcTranslateVideoToText(room_id, video_url, frame_rate, resolution)
         
