@@ -48,6 +48,12 @@ def funcSendMessage(room_id, sender_id, message_obj):
                 "message": result["error"],
                 "data": [],
             }
+
+        message_id = result.get("message_id")
+
+        if message_id:
+            print(f"✅ Message created: {message_id}")
+
         return {
             "status": "success",
             "code": 0,
@@ -68,6 +74,26 @@ def funcDeleteMessage(message_id):
                 "message": result["error"],
                 "data": [],
             }
+
+        room_id = result.get("room_id")
+
+        # 🔥 EMIT DELETE EVENT
+        if message_id and room_id:
+            try:
+                socketio.emit(
+                    "message_deleted",
+                    {
+                        "action": "DELETE",
+                        "room_id": room_id,
+                        "message_id": message_id,
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                    room=f"room_{room_id}",
+                )
+                print(f"✅ Socket.IO delete event emitted: {message_id}")
+            except Exception as e:
+                print(f"⚠️ Socket.IO emit error: {str(e)}")
+
         return {
             "status": "success",
             "code": 0,
@@ -96,3 +122,28 @@ def funcGetChatRoomList(user_id, limit=10, page=1, search=None):
         }
     except Exception as e:
         return {"status": "error", "code": 500, "message": str(e), "data": []}
+
+
+def funcGetSingleMessage(message_id, viewer_id):
+    """Fetch a single message by ID - optimized for realtime updates"""
+    try:
+        from appname.datas.messages import getSingleMessage
+
+        result = getSingleMessage(message_id, viewer_id)
+
+        if isinstance(result, dict) and "error" in result:
+            return {
+                "status": "error",
+                "code": 404,
+                "message": result["error"],
+                "data": {},
+            }
+
+        return {
+            "status": "success",
+            "code": 0,
+            "message": "",
+            "data": {"message": result},
+        }
+    except Exception as e:
+        return {"status": "error", "code": 500, "message": str(e), "data": {}}

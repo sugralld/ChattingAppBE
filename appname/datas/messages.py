@@ -165,3 +165,85 @@ def getMessagesForRoom(room_id, viewer_user_id):
     finally:
         cur.close()
         conn.close()
+
+
+def getSingleMessage(message_id, viewer_user_id):
+    """
+    Fetch a single message by message_id.
+    Optimized for realtime updates - returns just one message.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        # Fetch the message with all related data
+        cur.execute(
+            """
+            SELECT m.message_id,
+                   m.room_id,
+                   m.sender_id,
+                   m.message_type,
+                   m.sent_at,
+                   tm.text_content,
+                   mm.media_url,
+                   vn.duration_sec,
+                   vn.transcript_text
+              FROM messages m
+              LEFT JOIN text_messages tm ON tm.message_id = m.message_id
+              LEFT JOIN voice_notes vn ON vn.message_id = m.message_id
+              LEFT JOIN media_messages mm ON mm.message_id = m.message_id
+             WHERE m.message_id = %s
+             LIMIT 1;
+            """,
+            (message_id,),
+        )
+        row = cur.fetchone()
+
+        if not row:
+            return {"error": "Message not found"}
+
+        (
+            msg_id,
+            room_id,
+            sender_id,
+            message_type,
+            sent_at,
+            text_content,
+            media_url,
+            duration_sec,
+            transcript_text,
+        ) = row
+
+        # Verify viewer has access to this room
+        cur.execute(
+            "SELECT user_id_first, user_id_second FROM chat_room WHERE room_id = %s LIMIT 1;",
+            (room_id,),
+        )
+        room = cur.fetchone()
+        if not room:
+            return {"error": "Room not found"}
+
+        db_user_first, db_user_second = room[0], room[1]
+        if viewer_user_id not in (db_user_first, db_user_second):
+            return {"error": "Viewer not authorized to view this message"}
+
+        message_data = {
+            "message_id": str(msg_id),
+            "room_id": room_id,
+            "sender_id": sender_id,
+            "message_type": message_type,
+            "content": text_content if message_type == "text" else None,
+            "media_url": media_url if message_type in ("voice", "video") else None,
+            "duration_sec": int(duration_sec) if duration_sec is not None else None,
+            "transcript_text": transcript_text,
+            "sent_at": (
+                sent_at.isoformat() if sent_at else None
+            ),  # ✅ Convert to ISO string
+        }
+
+        return message_data
+
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cur.close()
+        conn.close()

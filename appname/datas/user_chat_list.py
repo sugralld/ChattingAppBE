@@ -1,5 +1,6 @@
 from appname.config import *
 
+
 def getChatRoomList(user_id, limit, page, search=""):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -8,10 +9,10 @@ def getChatRoomList(user_id, limit, page, search=""):
 
         # 1) Find chat rooms where user is participant
         query = """
-            SELECT room_id, user_id_first, user_id_second, created_at
+            SELECT room_id, user_id_first, user_id_second, created_at, last_message, last_message_at
             FROM chat_room
             WHERE user_id_first = %s OR user_id_second = %s
-            ORDER BY created_at DESC
+            ORDER BY COALESCE(last_message_at, created_at) DESC
             LIMIT %s OFFSET %s
         """
         cur.execute(query, (user_id, user_id, limit, offset))
@@ -22,62 +23,57 @@ def getChatRoomList(user_id, limit, page, search=""):
         result = []
 
         for r in rooms:
-            room_id, user_first, user_second, created_at = r
+            (
+                room_id,
+                user_first,
+                user_second,
+                created_at,
+                last_message,
+                last_message_at,
+            ) = r
 
             # Determine friend_id (the other user)
             friend_id = user_second if user_id == user_first else user_first
 
             # Fetch friend's data from user_detail
             if search:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT user_id, username, profile_picture 
                     FROM user_detail 
                     WHERE user_id = %s AND username ILIKE %s
-                """, (friend_id, f"%{search}%"))
+                """,
+                    (friend_id, f"%{search}%"),
+                )
             else:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT user_id, username, profile_picture 
                     FROM user_detail 
                     WHERE user_id = %s
-                """, (friend_id,))
+                """,
+                    (friend_id,),
+                )
             friend_data = cur.fetchone()
             if not friend_data:
                 continue  # skip if search filter doesn't match
 
             friend_user_id, username, profile_picture = friend_data
 
-            # Get last message for this room
-            cur.execute("""
-                SELECT message_first, message_second, sent_at_first, sent_at_second
-                FROM message
-                WHERE room_id = %s
-                ORDER BY COALESCE(sent_at_first, sent_at_second) DESC, message_id DESC
-                LIMIT 1
-            """, (room_id,))
-            last_msg = cur.fetchone()
-            if last_msg:
-                m_first, m_second, t_first, t_second = last_msg
-                if user_id == user_first:
-                    last_message = m_first if t_first else m_second
-                    last_message_at = t_first if t_first else t_second
-                else:
-                    last_message = m_second if t_second else m_first
-                    last_message_at = t_second if t_second else t_first
-            else:
-                last_message = None
-                last_message_at = None
-
-            result.append({
-                "room_id": room_id,
-                "created_at": created_at,
-                "last_message": last_message,
-                "last_message_at": last_message_at,
-                "friend": {
-                    "user_id": friend_user_id,
-                    "username": username,
-                    "profile_picture": profile_picture
+            #  Use last_message and last_message_at directly from chat_room table
+            result.append(
+                {
+                    "room_id": room_id,
+                    "created_at": created_at,
+                    "last_message": last_message,  # From chat_room table
+                    "last_message_at": last_message_at,  # From chat_room table
+                    "friend": {
+                        "user_id": friend_user_id,
+                        "username": username,
+                        "profile_picture": profile_picture,
+                    },
                 }
-            })
+            )
 
         return {"success": True, "user_id": user_id, "chat_rooms": result}
 
