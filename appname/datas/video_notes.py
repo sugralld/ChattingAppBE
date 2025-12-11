@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from appname.config import *
 
+
 # ======================================
 # Temporary Upload (NO DB insert)
 # ======================================
@@ -15,10 +16,13 @@ def storeTempVideoNote(media_url, file_size, resolution, frame_rate):
         "frame_rate": frame_rate,
     }
 
+
 # ======================================
 # Actual SEND to DB
 # ======================================
-def insertVideoNote(sender_id, room_id, media_url, file_size, resolution, frame_rate):
+def insertVideoNote(
+    sender_id, room_id, media_url, file_size, resolution, frame_rate, duration_sec=None
+):
     conn = get_db_connection()
     cur = conn.cursor()
     print("Sending video note...")
@@ -47,10 +51,10 @@ def insertVideoNote(sender_id, room_id, media_url, file_size, resolution, frame_
         # Insert into video_notes
         cur.execute(
             """
-            INSERT INTO video_notes (message_id, resolution, frame_rate)
-            VALUES (%s, %s, %s)
+            INSERT INTO video_notes (message_id, resolution, frame_rate, duration_sec)
+            VALUES (%s, %s, %s, %s)
         """,
-            (message_id, resolution, frame_rate),
+            (message_id, resolution, frame_rate, duration_sec),
         )
 
         # Update chat room summary
@@ -84,7 +88,7 @@ def insertVideoNote(sender_id, room_id, media_url, file_size, resolution, frame_
 # ===============================
 # UPDATE Video Notes translate_yn
 # ===============================
-def updateVideoNoteTranslateStatus(message_id, translate_yn='Y'):
+def updateVideoNoteTranslateStatus(message_id, translate_yn="Y"):
     conn = get_db_connection()
     cur = conn.cursor()
 
@@ -119,9 +123,12 @@ def updateVideoNoteTranslateYN(message_id):
     cur = conn.cursor()
     try:
         # Check if message_id exists in translate_video (compare as text to avoid uuid cast errors)
-        cur.execute("SELECT message_id FROM translate_video WHERE message_id::text = %s LIMIT 1", (message_id,))
+        cur.execute(
+            "SELECT message_id FROM translate_video WHERE message_id::text = %s LIMIT 1",
+            (message_id,),
+        )
         exists = cur.fetchone()
-        translate_yn = 'Y' if exists else 'N'
+        translate_yn = "Y" if exists else "N"
 
         # Update video_notes.translate_yn
         cur.execute(

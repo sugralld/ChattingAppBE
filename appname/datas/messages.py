@@ -114,12 +114,17 @@ def getMessagesForRoom(room_id, viewer_user_id):
                    m.sent_at,
                    tm.text_content,
                    mm.media_url,
-                   vn.duration_sec,
-                   vn.transcript_text
+                   vn.duration_sec AS voice_duration,
+                   vn.transcript_text,
+                   vid.duration_sec AS video_duration,
+                   vid.resolution,
+                   vid.frame_rate,
+                   vid.translate_yn
               FROM messages m
               LEFT JOIN text_messages tm ON tm.message_id = m.message_id
               LEFT JOIN voice_notes vn ON vn.message_id = m.message_id
               LEFT JOIN media_messages mm ON mm.message_id = m.message_id
+              LEFT JOIN video_notes vid ON vid.message_id = m.message_id
              WHERE m.room_id = %s
              ORDER BY m.sent_at ASC, m.message_id ASC;
             """,
@@ -137,9 +142,21 @@ def getMessagesForRoom(room_id, viewer_user_id):
                 sent_at,
                 text_content,
                 media_url,
-                duration_sec,
+                voice_duration,
                 transcript_text,
+                video_duration,
+                resolution,
+                frame_rate,
+                translate_yn,
             ) = r
+
+            # Determine duration based on message type
+            duration_sec = None
+            if message_type == "voice" and voice_duration is not None:
+                duration_sec = int(voice_duration)
+            elif message_type == "video" and video_duration is not None:
+                duration_sec = int(video_duration)
+
             messages.append(
                 {
                     "message_id": str(message_id),
@@ -150,10 +167,15 @@ def getMessagesForRoom(room_id, viewer_user_id):
                     "media_url": (
                         media_url if message_type in ("voice", "video") else None
                     ),
-                    "duration_sec": (
-                        int(duration_sec) if duration_sec is not None else None
-                    ),
+                    "duration_sec": duration_sec,
                     "transcript_text": transcript_text,
+                    "resolution": resolution if message_type == "video" else None,
+                    "frame_rate": (
+                        int(frame_rate)
+                        if message_type == "video" and frame_rate is not None
+                        else None
+                    ),
+                    "translate_yn": translate_yn if message_type == "video" else None,
                     "sent_at": sent_at,
                 }
             )
@@ -185,12 +207,17 @@ def getSingleMessage(message_id, viewer_user_id):
                    m.sent_at,
                    tm.text_content,
                    mm.media_url,
-                   vn.duration_sec,
-                   vn.transcript_text
+                   vn.duration_sec AS voice_duration,
+                   vn.transcript_text,
+                   vid.duration_sec AS video_duration,
+                   vid.resolution,
+                   vid.frame_rate,
+                   vid.translate_yn
               FROM messages m
               LEFT JOIN text_messages tm ON tm.message_id = m.message_id
               LEFT JOIN voice_notes vn ON vn.message_id = m.message_id
               LEFT JOIN media_messages mm ON mm.message_id = m.message_id
+              LEFT JOIN video_notes vid ON vid.message_id = m.message_id
              WHERE m.message_id = %s
              LIMIT 1;
             """,
@@ -209,8 +236,12 @@ def getSingleMessage(message_id, viewer_user_id):
             sent_at,
             text_content,
             media_url,
-            duration_sec,
+            voice_duration,
             transcript_text,
+            video_duration,
+            resolution,
+            frame_rate,
+            translate_yn,
         ) = row
 
         # Verify viewer has access to this room
@@ -226,6 +257,13 @@ def getSingleMessage(message_id, viewer_user_id):
         if viewer_user_id not in (db_user_first, db_user_second):
             return {"error": "Viewer not authorized to view this message"}
 
+        # Determine duration based on message type
+        duration_sec = None
+        if message_type == "voice" and voice_duration is not None:
+            duration_sec = int(voice_duration)
+        elif message_type == "video" and video_duration is not None:
+            duration_sec = int(video_duration)
+
         message_data = {
             "message_id": str(msg_id),
             "room_id": room_id,
@@ -233,8 +271,15 @@ def getSingleMessage(message_id, viewer_user_id):
             "message_type": message_type,
             "content": text_content if message_type == "text" else None,
             "media_url": media_url if message_type in ("voice", "video") else None,
-            "duration_sec": int(duration_sec) if duration_sec is not None else None,
+            "duration_sec": duration_sec,
             "transcript_text": transcript_text,
+            "resolution": resolution if message_type == "video" else None,
+            "frame_rate": (
+                int(frame_rate)
+                if message_type == "video" and frame_rate is not None
+                else None
+            ),
+            "translate_yn": translate_yn if message_type == "video" else None,
             "sent_at": (
                 sent_at.isoformat() if sent_at else None
             ),  # ✅ Convert to ISO string

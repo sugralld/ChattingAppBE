@@ -4,9 +4,9 @@ def funcUploadVideoNote(media_url, file_size, resolution, frame_rate):
     return storeTempVideoNote(media_url, file_size, resolution, frame_rate)
 
 
-def funcSendVideoNote(sender_id, room_id, media_url, file_size, resolution, frame_rate):
+def funcSendVideoNote(sender_id, room_id, media_url, file_size, resolution, frame_rate, duration_sec=None):
     try:
-        result = insertVideoNote(sender_id, room_id, media_url, file_size, resolution, frame_rate)
+        result = insertVideoNote(sender_id, room_id, media_url, file_size, resolution, frame_rate, duration_sec)
 
         if isinstance(result, dict) and result.get("status") == "error":
             return {
@@ -22,6 +22,7 @@ def funcSendVideoNote(sender_id, room_id, media_url, file_size, resolution, fram
             "file_size": file_size,
             "resolution": resolution,
             "frame_rate": frame_rate,
+            "duration_sec": duration_sec,
         }
 
         return {
