@@ -66,3 +66,31 @@ def funcGetVideoNotes(room_id, limit=20, page=1):
             "message": str(e),
             "data": [],
         }
+
+
+def funcUpdateVideoNoteTranslateStatus(message_id, translate_yn='Y'):
+    try:
+        result = updateVideoNoteTranslateStatus(message_id, translate_yn)
+
+        if result.get("status") == "error":
+            return {
+                "status": "error",
+                "code": 400,
+                "message": result.get("message"),
+                "data": [],
+            }
+
+        return {
+            "status": "success",
+            "code": 0,
+            "message": "Video note translation status updated",
+            "data": [],
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "code": 500,
+            "message": str(e),
+            "data": [],
+        }

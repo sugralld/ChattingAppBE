@@ -82,6 +82,39 @@ def insertVideoNote(sender_id, room_id, media_url, file_size, resolution, frame_
 
 
 # ===============================
+# UPDATE Video Notes translate_yn
+# ===============================
+def updateVideoNoteTranslateStatus(message_id, translate_yn='Y'):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            UPDATE video_notes
+               SET translate_yn = %s
+             WHERE message_id = %s;
+            """,
+            (translate_yn, message_id),
+        )
+
+        conn.commit()
+
+        return {
+            "status": "success",
+            "message": "Video note translation status updated",
+        }
+
+    except Exception as e:
+        conn.rollback()
+        return {"status": "error", "message": str(e)}
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ===============================
 # GET Video Notes (No Change)
 # ===============================
 def getVideoNotes(room_id, limit=20, page=1):

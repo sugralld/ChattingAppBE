@@ -56,6 +56,11 @@ def getTranslationFromVideo(room_id, video_url, frame_rate, resolution):
         print(f"Video URL: {video_url}")
         print(f"Frame rate: {frame_rate}, Resolution: {resolution}")
         
+        # Get video duration
+        print("⏱️ Calculating video duration...")
+        duration = get_video_duration(video_url)
+        print(f"✅ Duration: {duration:.2f} seconds")
+        
         # Use ASL recognition service - get predictions from SIBI model
         predictions = get_asl_translation(video_url)
         
@@ -91,17 +96,30 @@ def getTranslationFromVideo(room_id, video_url, frame_rate, resolution):
         # Insert into database
         cur.execute("""
             INSERT INTO translate_video
-            (room_id, video_url, frame_rate, resolution, translated_script, timestamps_json, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            (room_id, video_url, frame_rate, resolution, duration, translated_script, timestamps_json, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             room_id,
             video_url,
             frame_rate,
             resolution,
+            duration,
             translated_script,
             json.dumps(timestamps, ensure_ascii=False), 
             datetime.now()
         ))
+
+        # Update translate_yn to 'Y' for all video notes in this room with this video_url
+        cur.execute("""
+            UPDATE video_notes
+               SET translate_yn = 'Y'
+             WHERE message_id IN (
+                SELECT m.message_id 
+                FROM messages m
+                JOIN media_messages mm ON m.message_id = mm.message_id
+                WHERE m.room_id = %s AND m.message_type = 'video' AND mm.media_url = %s
+            );
+        """, (room_id, video_url))
 
         conn.commit()
 
