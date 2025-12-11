@@ -94,3 +94,31 @@ def funcUpdateVideoNoteTranslateStatus(message_id, translate_yn='Y'):
             "message": str(e),
             "data": [],
         }
+
+
+def funcUpdateVideoNoteTranslateYN(message_id):
+    try:
+        result = updateVideoNoteTranslateYN(message_id)
+
+        if result.get("status") == "error":
+            return {
+                "status": "error",
+                "code": 500,
+                "message": result.get("message"),
+                "data": [],
+            }
+
+        return {
+            "status": "success",
+            "code": 0,
+            "message": "translate_yn updated",
+            "data": [{"message_id": message_id, "translate_yn": result.get("translate_yn")}],
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "code": 500,
+            "message": str(e),
+            "data": [],
+        }

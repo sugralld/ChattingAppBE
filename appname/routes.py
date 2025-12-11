@@ -718,6 +718,7 @@ def translate_asl_route():
         room_id = data.get("room_id")
         frame_rate = data.get("frame_rate")
         resolution = data.get("resolution")
+        message_id = data.get("message_id")
         generate_srt = data.get("generate_srt", False)
 
         if not video_url or not room_id or not frame_rate or not resolution:
@@ -733,15 +734,43 @@ def translate_asl_route():
                 400,
             )
 
-        res = funcTranslateVideoToText(room_id, video_url, frame_rate, resolution)
+        # message_id is required so we can link translation to the video note/message
+        res = funcTranslateVideoToText(room_id, video_url, frame_rate, resolution, message_id)
         
-        # Generate SRT file if requested (using local function)
-        if generate_srt and res["status"] == "success" and res["data"]:
-            from appname.datas.model_ai import generate_srt_from_predictions
-            srt_path = generate_srt_from_predictions(res["data"], f"subtitles_room_{room_id}.srt")
-            res["srt_file"] = srt_path
-        
-        status_code = 200 if res["status"] == "success" else 500
+        # After saving translation, fetch saved translate_video record (includes duration and message_id)
+        if res["status"] == "success":
+            if message_id:
+                saved = funcGetTranslateVideo(room_id, message_id)
+            else:
+                saved = funcGetTranslateVideoByRoomAndUrl(room_id, video_url)
+
+            if saved.get("status") == "success":
+                translate_data = saved.get("data", {})
+
+                # Format response to match original structure: timestamps array in "data" field
+                # but include additional metadata (message_id, duration, etc.)
+                formatted_response = {
+                    "status": "success",
+                    "code": 0,
+                    "message": "ASL translation completed",
+                    "data": translate_data.get("timestamps", []),
+                    "message_id": translate_data.get("message_id") or "",
+                    "duration": translate_data.get("duration"),
+                    "translated_script": translate_data.get("translated_script"),
+                    "created_at": translate_data.get("created_at"),
+                }
+
+                # optionally generate SRT from saved timestamps
+                if generate_srt and formatted_response.get("data"):
+                    from appname.datas.model_ai import generate_srt_from_predictions
+                    srt_path = generate_srt_from_predictions(formatted_response["data"], f"subtitles_room_{room_id}.srt")
+                    formatted_response["srt_file"] = srt_path
+
+                return jsonify(formatted_response), 200
+            else:
+                return jsonify(saved), 404
+
+        status_code = 500
         return jsonify(res), status_code
 
     except Exception as e:
@@ -830,6 +859,91 @@ def get_video_notes_route():
         result = funcGetVideoNotes(room_id, limit, page)
         status_code = 200 if result["status"] == "success" else 400
         return jsonify(result), status_code
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "code": 500,
+            "message": str(e),
+            "data": [],
+        }), 500
+
+
+@app.route("/chattingapp/gettranslatevideo", methods=["GET"])
+def get_translate_video_route():
+    try:
+        room_id = request.args.get("room_id")
+        message_id = request.args.get("message_id")
+
+        if not room_id or not message_id:
+            return (
+                jsonify({
+                    "status": "error",
+                    "code": 400,
+                    "message": "Missing required parameters: room_id and message_id",
+                    "data": [],
+                }),
+                400,
+            )
+
+        res = funcGetTranslateVideo(room_id, message_id)
+        status_code = 200 if res.get("status") == "success" else 404
+        return jsonify(res), status_code
+
+    except Exception as e:
+        return (
+            jsonify({"status": "error", "code": 500, "message": str(e), "data": []}),
+            500,
+        )
+
+
+@app.route("/chattingapp/updatemessageidtranslatevideo", methods=["POST"])
+def update_message_id_translate_video_route():
+    try:
+        data = request.get_json()
+        room_id = data.get("room_id") if data else None
+        video_url = data.get("video_url") if data else None
+        message_id = data.get("message_id") if data else None
+
+        if not room_id or not video_url or not message_id:
+            return (
+                jsonify({
+                    "status": "error",
+                    "code": 400,
+                    "message": "Missing required parameters: room_id, video_url, message_id",
+                    "data": [],
+                }),
+                400,
+            )
+
+        res = funcUpdateMessageIdTranslateVideo(room_id, video_url, message_id)
+        status_code = 200 if res.get("status") == "success" else 500
+        return jsonify(res), status_code
+
+    except Exception as e:
+        return (
+            jsonify({"status": "error", "code": 500, "message": str(e), "data": []}),
+            500,
+        )
+
+
+@app.route("/chattingapp/updatetranslateynvideonotes", methods=["POST"])
+def update_translate_yn_video_notes_route():
+    try:
+        data = request.get_json()
+        message_id = data.get("message_id") if data else None
+
+        if not message_id:
+            return jsonify({
+                "status": "error",
+                "code": 400,
+                "message": "Missing required parameter: message_id",
+                "data": [],
+            }), 400
+
+        res = funcUpdateVideoNoteTranslateYN(message_id)
+        status_code = 200 if res.get("status") == "success" else 500
+        return jsonify(res), status_code
 
     except Exception as e:
         return jsonify({

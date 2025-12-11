@@ -91,9 +91,9 @@ def updateVideoNoteTranslateStatus(message_id, translate_yn='Y'):
     try:
         cur.execute(
             """
-            UPDATE video_notes
-               SET translate_yn = %s
-             WHERE message_id = %s;
+                        UPDATE video_notes
+                             SET translate_yn = %s
+                         WHERE message_id::text = %s;
             """,
             (translate_yn, message_id),
         )
@@ -114,6 +114,31 @@ def updateVideoNoteTranslateStatus(message_id, translate_yn='Y'):
         conn.close()
 
 
+def updateVideoNoteTranslateYN(message_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        # Check if message_id exists in translate_video (compare as text to avoid uuid cast errors)
+        cur.execute("SELECT message_id FROM translate_video WHERE message_id::text = %s LIMIT 1", (message_id,))
+        exists = cur.fetchone()
+        translate_yn = 'Y' if exists else 'N'
+
+        # Update video_notes.translate_yn
+        cur.execute(
+            "UPDATE video_notes SET translate_yn = %s WHERE message_id::text = %s",
+            (translate_yn, message_id),
+        )
+        conn.commit()
+        return {"status": "success", "translate_yn": translate_yn}
+
+    except Exception as e:
+        conn.rollback()
+        return {"status": "error", "message": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
 # ===============================
 # GET Video Notes (No Change)
 # ===============================
@@ -127,7 +152,7 @@ def getVideoNotes(room_id, limit=20, page=1):
         query = """
             SELECT  m.message_id, m.sender_id, m.sent_at,
                     mm.media_url, mm.file_size,
-                    vn.resolution, vn.frame_rate
+                    vn.resolution, vn.frame_rate, vn.translate_yn
               FROM messages m
         JOIN media_messages mm ON m.message_id = mm.message_id
         JOIN video_notes vn     ON m.message_id = vn.message_id
@@ -150,6 +175,7 @@ def getVideoNotes(room_id, limit=20, page=1):
                     "file_size": r[4],
                     "resolution": r[5],
                     "frame_rate": r[6],
+                    "translate_yn": r[7],
                 }
             )
 

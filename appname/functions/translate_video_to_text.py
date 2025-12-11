@@ -1,5 +1,5 @@
 # functions/translate_video_to_text.py - FIXED VERSION
-from appname.datas.translate_video_to_text import getTranslationFromVideo
+from appname.datas.translate_video_to_text import getTranslationFromVideo, getTranslateVideo, getTranslateVideoByRoomAndUrl, updateTranslateVideoMessageID
 from appname.datas.model_ai import *
 import numpy as np
 
@@ -62,10 +62,10 @@ def predict_asl_text(video_url):
         }
 
 
-def funcTranslateVideoToText(room_id, video_url, frame_rate, resolution):
+def funcTranslateVideoToText(room_id, video_url, frame_rate, resolution, message_id=None):
     try:
         print(f"🚀 Starting translation for room {room_id}")
-        result = getTranslationFromVideo(room_id, video_url, frame_rate, resolution)
+        result = getTranslationFromVideo(room_id, video_url, frame_rate, resolution, message_id)
 
         # Handle the result from getTranslationFromVideo
         if result is None:
@@ -93,3 +93,36 @@ def funcTranslateVideoToText(room_id, video_url, frame_rate, resolution):
             "message": str(e),
             "data": fallback_timestamps()
         }
+
+
+def funcGetTranslateVideo(room_id, message_id):
+    try:
+        result = getTranslateVideo(room_id, message_id)
+        if isinstance(result, dict) and result.get("error"):
+            return {"status": "error", "code": 404, "message": result.get("error"), "data": []}
+
+        return {"status": "success", "code": 0, "message": "Translate video retrieved", "data": result}
+
+    except Exception as e:
+        return {"status": "error", "code": 500, "message": str(e), "data": []}
+
+
+def funcGetTranslateVideoByRoomAndUrl(room_id, video_url):
+    try:
+        result = getTranslateVideoByRoomAndUrl(room_id, video_url)
+        if isinstance(result, dict) and result.get("error"):
+            return {"status": "error", "code": 404, "message": result.get("error"), "data": []}
+
+        return {"status": "success", "code": 0, "message": "Translate video retrieved", "data": result}
+    except Exception as e:
+        return {"status": "error", "code": 500, "message": str(e), "data": []}
+
+
+def funcUpdateMessageIdTranslateVideo(room_id, video_url, message_id):
+    try:
+        result = updateTranslateVideoMessageID(room_id, video_url, message_id)
+        if result.get("status") == "error":
+            return {"status": "error", "code": 500, "message": result.get("message"), "data": []}
+        return {"status": "success", "code": 0, "message": "message_id updated", "data": result}
+    except Exception as e:
+        return {"status": "error", "code": 500, "message": str(e), "data": []}
