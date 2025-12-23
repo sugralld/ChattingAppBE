@@ -97,6 +97,85 @@ def update_user_route():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# EDIT PROFILE (username, user_email, dob)
+@app.route("/chattingapp/editprofile", methods=["POST"])
+def edit_profile_route():
+    try:
+        data = request.get_json()
+        user_id = data.get("user_id") if data else None
+        if not user_id:
+            return (
+                jsonify({"status": "error", "code": 400, "message": "Missing required parameter: user_id", "data": []}),
+                400,
+            )
+
+        # Only these fields are editable via this endpoint
+        username = data.get("username") if data else None
+        user_email = data.get("user_email") if data else None
+        dob = data.get("dob") if data else None
+
+        if not any([username, user_email, dob]):
+            return (
+                jsonify({"status": "error", "code": 400, "message": "Nothing to update: provide username, user_email or dob", "data": []}),
+                400,
+            )
+
+        payload = {"username": username, "user_email": user_email, "dob": dob}
+
+        result = funcEditProfile(user_id, payload)
+        status_code = 200 if result.get("status") == "success" else 400
+        return jsonify(result), status_code
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# SEND VERIFICATION EMAIL (only user_email required)
+@app.route("/chattingapp/sendemail", methods=["POST"])
+def send_email_route():
+    try:
+        data = request.get_json()
+        user_email = data.get("user_email") if data else None
+
+        if not user_email:
+            return (
+                jsonify({"status": "error", "code": 400, "message": "Missing required parameter: user_email", "data": []}),
+                400,
+            )
+
+        # Call handler with email only
+        res = funcSendVerificationEmail(user_email=user_email)
+        status_code = 200 if res.get("status") == "success" else 400
+        return jsonify(res), status_code
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# VERIFY CODE AND CHANGE PASSWORD (user_id optional; user_email allowed)
+@app.route("/chattingapp/verificatepassword", methods=["POST"])
+def verificate_password_route():
+    try:
+        data = request.get_json()
+        user_id = data.get("user_id") if data else None
+        user_email = data.get("user_email") if data else None
+        verification_code = data.get("verification_code") if data else None
+        new_password = data.get("new_password") if data else None
+
+        if not verification_code or not new_password or (not user_id and not user_email):
+            return (
+                jsonify({"status": "error", "code": 400, "message": "Missing required parameters: verification_code, new_password, and either user_id or user_email must be provided", "data": []}),
+                400,
+            )
+
+        res = funcVerifyAndChangePassword(user_id, verification_code, new_password, user_email=user_email)
+        status_code = 200 if res.get("status") == "success" else 400
+        return jsonify(res), status_code
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # DELETE USER DETAIL
 @app.route("/chattingapp/deleteuserdetails", methods=["DELETE"])
 def delete_user_route():
@@ -141,30 +220,41 @@ def register_user_route():
         username = data.get("username", "").strip()
         password = data.get("password", "")
         profile_picture = data.get("profile_picture", "")
+        dob = data.get("dob", "")
 
         # Validation
-        if not email or not username or not password:
+        if not email or not username or not password or not dob:
             print("❌ Missing required field")
-            return {"error": "Email, username, dan password wajib diisi"}
+            return jsonify({"error": "Email, username, password, dan dob wajib diisi"}), 400
 
         if not validate_email(email):
             print("❌ Invalid email format")
-            return {"error": "Format email tidak valid"}
+            return jsonify({"error": "Format email tidak valid"}), 400
+
+        # Basic DOB format check YYYY-MM-DD
+        import datetime
+        try:
+            datetime.datetime.strptime(dob, "%Y-%m-%d")
+        except Exception:
+            print("❌ Invalid dob format")
+            return jsonify({"error": "Format dob tidak valid. Gunakan YYYY-MM-DD"}), 400
 
         is_valid_password, password_message = validate_password(password)
         if not is_valid_password:
             print("❌ Password invalid:", password_message)
-            return {"error": password_message}
+            return jsonify({"error": password_message}), 400
 
         if len(username) < 3:
             print("❌ Username too short")
-            return {"error": "Username minimal 3 karakter"}
+            return jsonify({"error": "Username minimal 3 karakter"}), 400
 
         # Check existing user
         print("✅ Validation passed, checking existing user...")
         if check_user_exists(email, username):
             print("❌ User already exists")
-            return {"error": "Email atau username sudah terdaftar"}
+            return jsonify({"error": "Email atau username sudah terdaftar"}), 400
+
+        # Pass data through to registration handler (it now expects dob)
         result = funcRegisterUser(data)
 
         status_code = 201 if result["status"] == "success" else 400

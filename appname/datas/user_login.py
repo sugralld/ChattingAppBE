@@ -10,6 +10,7 @@ def loginUser(identifier, password):
             user_id,
             user_email,
             username,
+            dob,
             profile_picture,
             blocked_user,
             created_at,
@@ -25,7 +26,7 @@ def loginUser(identifier, password):
         row = cur.fetchone()
 
         if row:
-            stored_password = row[7]
+            stored_password = row[8]
             # Check if password is hashed (bcrypt) or plain text
             if stored_password.startswith("$2b$"):
                 # Hashed password - use bcrypt
@@ -42,10 +43,11 @@ def loginUser(identifier, password):
                 "user_id": row[0],
                 "user_email": row[1],
                 "username": row[2],
-                "profile_picture": row[3],
-                "blocked_user": row[4],
-                "created_at": row[5],
-                "updated_at": row[6],
+                "dob": row[3],
+                "profile_picture": row[4],
+                "blocked_user": row[5],
+                "created_at": row[6],
+                "updated_at": row[7],
             }
         else:
             return {"error": "Pengguna tidak ditemukan"}

@@ -39,7 +39,7 @@ def getChatRoomList(user_id, limit, page, search=""):
             if search:
                 cur.execute(
                     """
-                    SELECT user_id, username, profile_picture 
+                    SELECT user_id, username, dob, profile_picture 
                     FROM user_detail 
                     WHERE user_id = %s AND username ILIKE %s
                 """,
@@ -48,7 +48,7 @@ def getChatRoomList(user_id, limit, page, search=""):
             else:
                 cur.execute(
                     """
-                    SELECT user_id, username, profile_picture 
+                    SELECT user_id, username, dob, profile_picture 
                     FROM user_detail 
                     WHERE user_id = %s
                 """,
@@ -58,7 +58,7 @@ def getChatRoomList(user_id, limit, page, search=""):
             if not friend_data:
                 continue  # skip if search filter doesn't match
 
-            friend_user_id, username, profile_picture = friend_data
+            friend_user_id, username, dob, profile_picture = friend_data
 
             #  Use last_message and last_message_at directly from chat_room table
             result.append(
@@ -70,6 +70,7 @@ def getChatRoomList(user_id, limit, page, search=""):
                     "friend": {
                         "user_id": friend_user_id,
                         "username": username,
+                        "dob": dob,
                         "profile_picture": profile_picture,
                     },
                 }

@@ -11,6 +11,7 @@ def getUserDetail(limit=10, page=1):
             user_id,
             user_email,
             username,
+            dob,
             profile_picture,
             blocked_user,
             created_at,
@@ -30,10 +31,11 @@ def getUserDetail(limit=10, page=1):
                     "user_id": row[0],
                     "user_email": row[1],
                     "username": row[2],
-                    "profile_picture": row[3],
-                    "blocked_user": row[4],
-                    "created_at": row[5],
-                    "updated_at": row[6],
+                    "dob": row[3],
+                    "profile_picture": row[4],
+                    "blocked_user": row[5],
+                    "created_at": row[6],
+                    "updated_at": row[7],
                 }
             )
         return users
@@ -54,6 +56,7 @@ def getUserDetailByID(user_id):
             user_id,
             user_email,
             username,
+            dob,
             profile_picture,
             blocked_user,
             created_at,
@@ -70,10 +73,11 @@ def getUserDetailByID(user_id):
                 "user_id": row[0],
                 "user_email": row[1],
                 "username": row[2],
-                "profile_picture": row[3],
-                "blocked_user": row[4],
-                "created_at": row[5],
-                "updated_at": row[6],
+                "dob": row[3],
+                "profile_picture": row[4],
+                "blocked_user": row[5],
+                "created_at": row[6],
+                "updated_at": row[7],
             }
         else:
             return {"error": f"User with ID {user_id} not found"}
@@ -104,12 +108,13 @@ def insertUserDetail(data):
             user_id,
             user_email,
             username,
-            password_hash,  -- FIXED HERE
+            dob,
+            password_hash,
             profile_picture,
             blocked_user,
             created_at,
             updated_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW());
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW());
     """
     try:
         cur.execute(
@@ -118,6 +123,7 @@ def insertUserDetail(data):
                 new_user_id,
                 data["user_email"],
                 data["username"],
+                data.get("dob"),
                 data["password"],  # NOTE: you can hash it here if needed
                 data.get("profile_picture"),
                 data.get("blocked_user", False),
@@ -142,7 +148,8 @@ def updateUserDetail(user_id, data):
         SET 
             user_email = %s,
             username = %s,
-            password_hash = %s,  -- FIXED HERE
+            dob = %s,
+            password_hash = %s,
             profile_picture = %s,
             blocked_user = %s,
             updated_at = NOW()
@@ -154,6 +161,7 @@ def updateUserDetail(user_id, data):
             (
                 data["user_email"],
                 data["username"],
+                data.get("dob"),
                 data["password"],  # Again, hash it if needed
                 data.get("profile_picture"),
                 data.get("blocked_user", False),
@@ -164,6 +172,149 @@ def updateUserDetail(user_id, data):
         if cur.rowcount == 0:
             return {"error": f"User with ID {user_id} not found"}
         return {"message": "User updated successfully"}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+# Update only profile fields (username, user_email, dob) - only when changed
+def updateUserProfile(user_id, username=None, user_email=None, dob=None):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        # Fetch current values
+        cur.execute(
+            "SELECT username, user_email, dob FROM user_detail WHERE user_id = %s",
+            (user_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": f"User with ID {user_id} not found"}
+
+        current_username, current_email, current_dob = row
+
+        updates = []
+        params = []
+
+        if username is not None and username != current_username:
+            updates.append("username = %s")
+            params.append(username)
+        if user_email is not None and user_email != current_email:
+            updates.append("user_email = %s")
+            params.append(user_email)
+        if dob is not None and dob != current_dob:
+            updates.append("dob = %s")
+            params.append(dob)
+
+        if not updates:
+            return {"message": "No changes detected"}
+
+        query = f"UPDATE user_detail SET {', '.join(updates)}, updated_at = NOW() WHERE user_id = %s;"
+        params.append(user_id)
+        cur.execute(query, tuple(params))
+        conn.commit()
+        return {"message": "Profile updated successfully"}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+# Authentication related helpers
+def getUserAuthInfo(user_id):
+    """Return user_email and password_hash and verification_code for a given user_id"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT user_email, password_hash, verification_code FROM user_detail WHERE user_id = %s",
+            (user_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": f"User with ID {user_id} not found"}
+        return {"user_email": row[0], "password_hash": row[1], "verification_code": row[2]}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+def getUserAuthInfoByEmail(user_email):
+    """Return user_id, password_hash and verification_code for a given user_email"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT user_id, password_hash, verification_code FROM user_detail WHERE user_email = %s",
+            (user_email,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": f"User with email {user_email} not found"}
+        return {"user_id": row[0], "password_hash": row[1], "verification_code": row[2]}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+def setVerificationCode(user_id, code):
+    """Store verification code for a user"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE user_detail SET verification_code = %s, updated_at = NOW() WHERE user_id = %s",
+            (code, user_id),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            return {"error": f"User with ID {user_id} not found"}
+        return {"message": "Verification code set"}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+def getVerificationCode(user_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT verification_code FROM user_detail WHERE user_id = %s",
+            (user_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"error": f"User with ID {user_id} not found"}
+        return {"verification_code": row[0]}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cur.close()
+        conn.close()
+
+
+def updatePasswordHash(user_id, new_hash):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE user_detail SET password_hash = %s, verification_code = NULL, updated_at = NOW() WHERE user_id = %s",
+            (new_hash, user_id),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            return {"error": f"User with ID {user_id} not found"}
+        return {"message": "Password updated"}
     except Exception as e:
         return {"error": str(e)}
     finally:
