@@ -59,7 +59,6 @@ def getUserDetailByID(user_id):
             user_id,
             user_email,
             username,
-            dob,
             profile_picture,
             blocked_user,
             created_at,
