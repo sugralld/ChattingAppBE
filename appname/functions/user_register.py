@@ -50,13 +50,21 @@ def registerUser(data):
         username = data.get("username", "").strip()
         password = data.get("password", "")
         profile_picture = data.get("profile_picture", "")
+        dob = data.get("dob", "")
 
         # Validation
-        if not email or not username or not password:
-            return {"error": "Email, username, dan password wajib diisi"}
+        if not email or not username or not password or not dob:
+            return {"error": "Email, username, password, dan dob wajib diisi"}
 
         if not validate_email(email):
             return {"error": "Format email tidak valid"}
+
+        # Basic DOB format check YYYY-MM-DD
+        import datetime
+        try:
+            datetime.datetime.strptime(dob, "%Y-%m-%d")
+        except Exception:
+            return {"error": "Format dob tidak valid. Gunakan YYYY-MM-DD"}
 
         is_valid_password, password_message = validate_password(password)
         if not is_valid_password:
@@ -68,7 +76,6 @@ def registerUser(data):
         # Check if user exists
         if check_user_exists(email, username):
             return {"error": "Email atau username sudah terdaftar"}
-
         # Hash password
         password_hash = bcrypt.hashpw(
             password.encode("utf-8"), bcrypt.gensalt()
@@ -93,16 +100,17 @@ def registerUser(data):
                 user_id,
                 user_email,
                 username,
+                dob,
                 password_hash,
                 profile_picture,
                 blocked_user,
                 created_at,
                 updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW());
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW());
         """
 
         cur.execute(
-            query, (new_user_id, email, username, password_hash, profile_picture, False)
+            query, (new_user_id, email, username, dob, password_hash, profile_picture, False)
         )
         conn.commit()
 
@@ -111,6 +119,7 @@ def registerUser(data):
             "user_id": new_user_id,
             "user_email": email,
             "username": username,
+            "dob": dob,
         }
 
     except Exception as e:
@@ -142,6 +151,7 @@ def funcRegisterUser(data):
                     "user_id": result["user_id"],
                     "user_email": result["user_email"],
                     "username": result["username"],
+                    "dob": result.get("dob"),
                 }
             ],
         }

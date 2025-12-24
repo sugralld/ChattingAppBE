@@ -11,6 +11,7 @@ def searchFriendByUsername(user_id, keyword, limit=10, page=1):
         SELECT 
             ud.user_id,
             ud.username,
+            ud.dob,
             ud.profile_picture,
             ud.blocked_user,
             ud.created_at,
@@ -61,11 +62,12 @@ def searchFriendByUsername(user_id, keyword, limit=10, page=1):
                 {
                     "user_id": row[0],
                     "username": row[1],
-                    "profile_picture": row[2],
-                    "blocked_user": row[3],
-                    "created_at": row[4],
-                    "updated_at": row[5],
-                    "status": row[6],
+                    "dob": row[2],
+                    "profile_picture": row[3],
+                    "blocked_user": row[4],
+                    "created_at": row[5],
+                    "updated_at": row[6],
+                    "status": row[7],
                 }
             )
         return results
