@@ -30,6 +30,8 @@ def funcGetUserDetail(limit=10, page=1):
                     "blocked_user": row.get("blocked_user"),
                     "created_at": row.get("created_at"),
                     "updated_at": row.get("updated_at"),
+                    "dob": row.get("dob"),
+                    "bio": row.get("bio"),
                 }
             )
 

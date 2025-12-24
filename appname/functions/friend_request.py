@@ -62,25 +62,3 @@ def funcRejectFriendRequest(request_id):
     except Exception as e:
         return {"status": "error", "code": 500, "message": str(e), "data": []}
 
-
-def funcAcceptFriendRequest(request_id):
-    try:
-        result = acceptFriendRequest(request_id)
-
-        if isinstance(result, dict) and "error" in result:
-            return {
-                "status": "error",
-                "code": 404,
-                "message": result["error"],
-                "data": [],
-            }
-
-        return {
-            "status": "success",
-            "code": 0,
-            "message": result["message"],
-            "data": {"sender": result["sender"], "receiver": result["receiver"]},
-        }
-
-    except Exception as e:
-        return {"status": "error", "code": 500, "message": str(e), "data": []}

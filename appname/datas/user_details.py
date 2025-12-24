@@ -14,7 +14,9 @@ def getUserDetail(limit=10, page=1):
             profile_picture,
             blocked_user,
             created_at,
-            updated_at
+            updated_at,
+            dob,
+            bio
         FROM user_detail
         ORDER BY created_at DESC
         LIMIT %s OFFSET %s;
@@ -34,6 +36,8 @@ def getUserDetail(limit=10, page=1):
                     "blocked_user": row[4],
                     "created_at": row[5],
                     "updated_at": row[6],
+                    "dob": row[7],
+                    "bio": row[8],
                 }
             )
         return users
@@ -57,7 +61,9 @@ def getUserDetailByID(user_id):
             profile_picture,
             blocked_user,
             created_at,
-            updated_at
+            updated_at,
+            dob,
+            bio
         FROM user_detail
         WHERE user_id = %s;
     """
@@ -74,6 +80,8 @@ def getUserDetailByID(user_id):
                 "blocked_user": row[4],
                 "created_at": row[5],
                 "updated_at": row[6],
+                "dob": row[7],
+                "bio": row[8],
             }
         else:
             return {"error": f"User with ID {user_id} not found"}
@@ -94,8 +102,14 @@ def insertUserDetail(data):
     cur.execute(id_query)
     last_id = cur.fetchone()
     if last_id:
-        number = int(last_id[0][1:]) + 1
-        new_user_id = f"U{number:05d}"
+        try:
+            # Extract number from format "U00001"
+            number = int(last_id[0][1:]) + 1
+            new_user_id = f"U{number:05d}"
+        except ValueError:
+            # Fallback if ID format is different
+            import uuid
+            new_user_id = str(uuid.uuid4())[:8]
     else:
         new_user_id = "U00001"
 
@@ -104,23 +118,27 @@ def insertUserDetail(data):
             user_id,
             user_email,
             username,
-            password_hash,  -- FIXED HERE
+            password_hash,
             profile_picture,
             blocked_user,
+            dob,
+            bio,
             created_at,
             updated_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW());
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW());
     """
     try:
         cur.execute(
             query,
             (
                 new_user_id,
-                data["user_email"],
-                data["username"],
-                data["password"],  # NOTE: you can hash it here if needed
+                data.get("user_email"),
+                data.get("username"),
+                data.get("password"),
                 data.get("profile_picture"),
                 data.get("blocked_user", False),
+                data.get("dob"),
+                data.get("bio"),
             ),
         )
         conn.commit()
@@ -137,29 +155,42 @@ def updateUserDetail(user_id, data):
     conn = get_db_connection()
     cur = conn.cursor()
 
-    query = """
-        UPDATE user_detail
-        SET 
-            user_email = %s,
-            username = %s,
-            password_hash = %s,  -- FIXED HERE
-            profile_picture = %s,
-            blocked_user = %s,
-            updated_at = NOW()
-        WHERE user_id = %s;
-    """
+    # Dynamic update query builder
+    fields = []
+    values = []
+
+    if "user_email" in data:
+        fields.append("user_email = %s")
+        values.append(data["user_email"])
+    if "username" in data:
+        fields.append("username = %s")
+        values.append(data["username"])
+    if "password" in data:
+        fields.append("password_hash = %s")
+        values.append(data["password"])
+    if "profile_picture" in data:
+        fields.append("profile_picture = %s")
+        values.append(data["profile_picture"])
+    if "blocked_user" in data:
+        fields.append("blocked_user = %s")
+        values.append(data["blocked_user"])
+    if "dob" in data:
+        fields.append("dob = %s")
+        values.append(data["dob"])
+    if "bio" in data:
+        fields.append("bio = %s")
+        values.append(data["bio"])
+
+    if not fields:
+        return {"message": "No fields to update"}
+
+    fields.append("updated_at = NOW()")
+    
+    query = f"UPDATE user_detail SET {', '.join(fields)} WHERE user_id = %s;"
+    values.append(user_id)
+
     try:
-        cur.execute(
-            query,
-            (
-                data["user_email"],
-                data["username"],
-                data["password"],  # Again, hash it if needed
-                data.get("profile_picture"),
-                data.get("blocked_user", False),
-                user_id,
-            ),
-        )
+        cur.execute(query, tuple(values))
         conn.commit()
         if cur.rowcount == 0:
             return {"error": f"User with ID {user_id} not found"}
