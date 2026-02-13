@@ -14,6 +14,7 @@ from appname.functions.voice_notes import *
 from appname.functions.storage import *
 from appname.utils.storage_utils import *
 from appname.utils.whisper_utils import *
+from appname.utils.crypto_utils import encrypt_text
 
 from appname.functions.user_login import *
 from appname.functions.user_friends import *
@@ -755,6 +756,9 @@ def transcribe_voice_note():
 
         audio_bytes = download_from_supabase(media_url)
         transcript = call_whisper(audio_bytes)
+        transcript_for_db = ""
+        if (transcript or "").strip():
+            transcript_for_db = encrypt_text(transcript)
 
         conn = get_db_connection()
         cur = conn.cursor()
@@ -775,7 +779,7 @@ def transcribe_voice_note():
                SET transcript_text = COALESCE(NULLIF(%s, ''), transcript_text)
              WHERE message_id = %s
             """,
-            (transcript or "", message_id),
+            (transcript_for_db, message_id),
         )
 
         # ✅ CRITICAL: Update messages.updated_at to trigger Realtime UPDATE event

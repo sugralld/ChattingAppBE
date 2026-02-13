@@ -2,6 +2,7 @@ from appname.config import *
 from datetime import datetime
 import json
 from appname import socketio
+from appname.utils.crypto_utils import encrypt_text
 
 
 def createOrGetChatRoom(user_id_first, user_id_second):
@@ -126,6 +127,8 @@ def sendMessage(room_id, sender_id, message_obj):
         if not text_content:
             return {"error": "Empty text content"}
 
+        encrypted_text = encrypt_text(text_content)
+
         # 3) Insert into messages and text_messages
         # messages.message_id is UUID in new schema
         cur.execute(
@@ -144,7 +147,7 @@ def sendMessage(room_id, sender_id, message_obj):
             INSERT INTO text_messages (message_id, text_content)
             VALUES (%s, %s)
             """,
-            (message_id, text_content),
+            (message_id, encrypted_text),
         )
 
         # 4) Update chat_room summary
@@ -155,7 +158,7 @@ def sendMessage(room_id, sender_id, message_obj):
                    last_message_at = %s
              WHERE room_id = %s;
             """,
-            (text_content, sent_at, room_id),
+            (encrypted_text, sent_at, room_id),
         )
 
         conn.commit()

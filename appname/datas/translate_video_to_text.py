@@ -9,6 +9,7 @@ import json
 
 from appname.datas.model_ai import get_asl_translation, fallback_timestamps
 from appname.config import *
+from appname.utils.crypto_utils import encrypt_text
 
 
 def download_video(video_url):
@@ -93,6 +94,20 @@ def getTranslationFromVideo(room_id, video_url, frame_rate, resolution, message_
             timestamps = []
             translated_script = "NO_SIGNS_DETECTED"
 
+        # Encrypt only for storage (DB-at-rest encryption). API returns stored values.
+        encrypted_script = encrypt_text(translated_script)
+        encrypted_timestamps = []
+        for ts in timestamps:
+            if isinstance(ts, dict):
+                encrypted_timestamps.append(
+                    {
+                        "second": ts.get("second"),
+                        "text": encrypt_text(ts.get("text", "")),
+                    }
+                )
+            else:
+                encrypted_timestamps.append(ts)
+
         # Insert into database (include message_id if provided)
         if message_id:
             cur.execute("""
@@ -106,8 +121,8 @@ def getTranslationFromVideo(room_id, video_url, frame_rate, resolution, message_
                 frame_rate,
                 resolution,
                 duration,
-                translated_script,
-                json.dumps(timestamps, ensure_ascii=False),
+                encrypted_script,
+                json.dumps(encrypted_timestamps, ensure_ascii=False),
                 datetime.now(),
             ))
         else:
@@ -121,8 +136,8 @@ def getTranslationFromVideo(room_id, video_url, frame_rate, resolution, message_
                 frame_rate,
                 resolution,
                 duration,
-                translated_script,
-                json.dumps(timestamps, ensure_ascii=False),
+                encrypted_script,
+                json.dumps(encrypted_timestamps, ensure_ascii=False),
                 datetime.now(),
             ))
 

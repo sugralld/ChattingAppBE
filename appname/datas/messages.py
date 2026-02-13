@@ -5,6 +5,8 @@ import json
 from flask import request, jsonify
 from flask_socketio import SocketIO, emit
 
+from appname.utils.crypto_utils import encrypt_text
+
 
 def sendMessage(room_id, sender_id, message_obj):
     """
@@ -39,6 +41,8 @@ def sendMessage(room_id, sender_id, message_obj):
         if not text_content:
             return {"error": "Empty text content"}
 
+        encrypted_text = encrypt_text(text_content)
+
         # Insert into messages and text_messages
         cur.execute(
             """
@@ -56,7 +60,7 @@ def sendMessage(room_id, sender_id, message_obj):
             INSERT INTO text_messages (message_id, text_content)
             VALUES (%s, %s)
             """,
-            (message_id, text_content),
+            (message_id, encrypted_text),
         )
 
         # Update chat_room summary
@@ -67,7 +71,7 @@ def sendMessage(room_id, sender_id, message_obj):
                    last_message_at = %s
              WHERE room_id = %s;
             """,
-            (text_content, sent_at, room_id),
+            (encrypted_text, sent_at, room_id),
         )
 
         conn.commit()
