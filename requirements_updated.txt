@@ -4,3 +4,5 @@ bcrypt
 psycopg2-binary
 resend
 requests
+python-dotenv
+cryptography

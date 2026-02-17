@@ -14,7 +14,7 @@ from appname.functions.voice_notes import *
 from appname.functions.storage import *
 from appname.utils.storage_utils import *
 from appname.utils.whisper_utils import *
-from appname.utils.crypto_utils import encrypt_text
+from appname.utils.crypto_utils import encrypt_text, encryption_status
 
 from appname.functions.user_login import *
 from appname.functions.user_friends import *
@@ -22,6 +22,15 @@ from appname.functions.friend_request import *
 from appname.functions.user_chat_list import *
 from appname.functions.translate_video_to_text import *
 from appname.functions.video_notes import *
+
+
+@app.route("/chattingapp/crypto/status", methods=["GET"])
+def crypto_status_route():
+    # Returns key presence/validity only; never returns the key itself.
+    try:
+        return jsonify({"status": "success", "data": encryption_status()}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 # GET USER DETAIL
